@@ -379,7 +379,7 @@ async function loadDailyWorkHours(yearMonth) {
                 item.className = 'flex justify-between items-center p-2 bg-purple-50 dark:bg-purple-800/10 rounded border border-purple-200 dark:border-purple-700/30';
                 
                 const workHours = parseFloat(record.workHours) || 0;
-                // 一天可能有兩組上下班（兩頭班休息前打卡）：每一段都列出來
+                // 一天可能有多組上下班（兩頭班休息前打卡）：每一段都列出來
                 const timeText = Array.isArray(record.segments) && record.segments.length
                     ? record.segments.map(seg => `${seg.start} ~ ${seg.end}`).join('、')
                     : `${record.punchIn || '--'} ~ ${record.punchOut || '--'}`;
@@ -2099,7 +2099,7 @@ async function loadPunchRecords(yearMonth) {
                 
                 const workHours = parseFloat(record.workHours) || 0;
                 totalHours += workHours;
-                // 一天可能有兩組上下班（兩頭班休息前打卡）：每一段都列出來
+                // 一天可能有多組上下班（兩頭班休息前打卡）：每一段都列出來
                 const timeText = Array.isArray(record.segments) && record.segments.length
                     ? record.segments.map(seg => `${seg.start} ~ ${seg.end}`).join('、')
                     : `${record.punchIn || '--'} ~ ${record.punchOut || '--'}`;

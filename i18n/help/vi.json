@@ -12,7 +12,7 @@
       "intro": "Trang mở đầu mỗi ngày: thông báo, nút chấm công, thông tin cá nhân và các bất thường chấm công do hệ thống phát hiện.",
       "steps": [
         "Đến nơi làm việc bấm \"Chấm công vào\", trước khi về bấm \"Chấm công ra\"; hệ thống ghi cả thời gian và vị trí GPS.",
-        "Ca gãy: chấm \"ra\" trước khi nghỉ và chấm \"vào\" khi quay lại; tối đa 2 cặp mỗi ngày.",
+        "Ca gãy: chấm \"ra\" trước khi nghỉ và chấm \"vào\" khi quay lại; tối đa 3 cặp mỗi ngày.",
         "Ngoài nút bấm, có thể chấm công bằng cách nhắn trong LINE hoặc quét mã QR trên máy tính bảng của công ty (nên dùng trình quét QR của LINE). Nếu quét bằng camera điện thoại mà trình duyệt đó chưa đăng nhập, hệ thống sẽ chuyển đến đăng nhập LINE và chấm công ngay sau đó.",
         "Nếu điện thoại hỗ trợ vân tay hoặc khuôn mặt, bấm \"Thiết lập sinh trắc học\" một lần rồi dùng sinh trắc học để chấm công nhanh.",
         "Quên chấm công hoặc sai giờ thì gửi \"Đề nghị bổ sung chấm công\", ghi rõ lý do và chờ quản trị viên duyệt.",
@@ -237,7 +237,7 @@
         "Kiểm tra địa điểm rồi lưu, sau đó xem ở \"Xem ca làm\"."
       ],
       "notes": [
-        "Ca gãy: chấm ra trước khi nghỉ và chấm vào khi quay lại (tối đa 2 cặp mỗi ngày); giờ làm tính theo chấm công thực tế đến phút. Thiếu chấm giờ nghỉ thì trừ phút nghỉ của ca và hiện trong bất thường chấm công.",
+        "Ca gãy: chấm ra trước khi nghỉ và chấm vào khi quay lại (tối đa 3 cặp mỗi ngày); giờ làm tính theo chấm công thực tế đến phút. Thiếu chấm giờ nghỉ thì trừ phút nghỉ của ca và hiện trong bất thường chấm công.",
         "Ngày không xếp ca: chỉ trừ 1 giờ nghỉ khi có mặt hơn 8 giờ.",
         "Cùng người, cùng ngày, cùng ca sẽ không được thêm trùng."
       ]

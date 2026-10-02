@@ -12,7 +12,7 @@
       "intro": "The page you open first every day: announcements, punch buttons, your personal profile, and any attendance exceptions the system found.",
       "steps": [
         "Tap \"Punch In\" when you arrive and \"Punch Out\" before you leave; both the time and your GPS location are recorded.",
-        "On a split shift, punch out before your break and punch in when you come back; up to two pairs a day.",
+        "On a split shift, punch out before your break and punch in when you come back; up to three pairs a day.",
         "Besides the buttons, you can punch by typing in LINE or by scanning the QR code on the company tablet (LINE's own QR scanner works best). If you scan with the phone camera and that browser is not logged in yet, you are taken to LINE login and the punch is recorded right after.",
         "If your phone supports fingerprint or face recognition, tap \"Set up biometrics\" once to pair it, then punch with biometrics from then on.",
         "If you forgot to punch or the time is wrong, submit a make-up punch request with a reason and wait for the administrator's approval.",
@@ -237,7 +237,7 @@
         "Check the location and submit, then confirm it appears under \"View Shifts\"."
       ],
       "notes": [
-        "On split shifts staff punch out before the break and in when they return (up to two pairs a day); hours follow the actual punches, to the minute. If the break punches are missing, the shift's break minutes are deducted and the day shows up under attendance issues.",
+        "On split shifts staff punch out before the break and in when they return (up to three pairs a day); hours follow the actual punches, to the minute. If the break punches are missing, the shift's break minutes are deducted and the day shows up under attendance issues.",
         "On days with no shift, 1 hour is taken off only when someone is on site for more than 8 hours.",
         "The same shift for the same person on the same day is rejected, so check the day first."
       ]

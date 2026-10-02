@@ -103,7 +103,7 @@ async function handleLinePunchFromUrl() {
                 // 後端的中文訊息會附上最近的打卡地點與距離，中文介面直接用
                 ERR_NOT_IN_RANGE: punchServerMessage(res, 'LPT_ERR_NOT_IN_RANGE'),
                 ERR_DUPLICATE_PUNCH: t('LPT_ERR_DUPLICATE'),
-                // 一天兩組上下班的順序規則（GS/PunchRules.gs）
+                // 一天多組上下班的順序規則（GS/PunchRules.gs）
                 ERR_PUNCH_SAME_TYPE: t('ERR_PUNCH_SAME_TYPE', res.params || {}),
                 ERR_PUNCH_LIMIT: t('ERR_PUNCH_LIMIT', res.params || {})
             };

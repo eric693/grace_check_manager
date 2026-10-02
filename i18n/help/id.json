@@ -12,7 +12,7 @@
       "intro": "Halaman yang dibuka pertama setiap hari: pengumuman, tombol absen, data pribadi, dan kejanggalan absensi yang terdeteksi sistem.",
       "steps": [
         "Setibanya di tempat kerja tekan \"Absen masuk\", sebelum pulang tekan \"Absen pulang\"; waktu dan lokasi GPS dicatat bersamaan.",
-        "Shift terpisah: absen keluar sebelum istirahat dan absen masuk saat kembali; maksimal dua pasang sehari.",
+        "Shift terpisah: absen keluar sebelum istirahat dan absen masuk saat kembali; maksimal tiga pasang sehari.",
         "Selain tombol, Anda bisa absen dengan mengetik di LINE atau memindai QR di tablet kantor (sebaiknya pakai pemindai QR di LINE). Jika memindai dengan kamera ponsel dan browser itu belum login, Anda diarahkan ke login LINE dan absen langsung tercatat setelahnya.",
         "Jika ponsel mendukung sidik jari atau wajah, tekan \"Atur biometrik\" sekali, lalu absen cukup dengan biometrik.",
         "Jika lupa absen atau waktunya salah, ajukan \"Perbaikan absensi\" dengan alasannya dan tunggu persetujuan admin.",
@@ -237,7 +237,7 @@
         "Periksa lokasi lalu simpan, kemudian cek di \"Lihat Shift\"."
       ],
       "notes": [
-        "Shift terpisah: absen keluar sebelum istirahat dan masuk saat kembali (maks. dua pasang sehari); jam kerja mengikuti absen sebenarnya sampai menit. Jika absen istirahat tidak ada, menit istirahat shift dikurangi dan muncul di masalah kehadiran.",
+        "Shift terpisah: absen keluar sebelum istirahat dan masuk saat kembali (maks. tiga pasang sehari); jam kerja mengikuti absen sebenarnya sampai menit. Jika absen istirahat tidak ada, menit istirahat shift dikurangi dan muncul di masalah kehadiran.",
         "Hari tanpa jadwal: 1 jam istirahat dikurangi hanya jika berada lebih dari 8 jam.",
         "Orang, hari, dan shift yang sama tidak bisa ditambahkan dua kali."
       ]

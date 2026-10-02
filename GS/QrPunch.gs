@@ -109,7 +109,7 @@ function qrPunch(sessionToken, qrTokenId, locationName) {
   const punchType = verified.punchType;
   const loc = rawLocation || 'QR打卡';
 
-  // 一天最多兩組上下班（休息前要打卡），順序與次數見 PunchRules.gs
+  // 一天最多三組上下班（休息前要打卡），順序與次數見 PunchRules.gs
   const attendanceSh = SpreadsheetApp.getActive().getSheetByName(SHEET_ATTENDANCE);
   const sequence = checkPunchSequence_(user.userId, punchType, attendanceSh.getDataRange().getValues());
   if (!sequence.ok) return sequence;

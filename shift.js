@@ -24,7 +24,7 @@ let allMonthShifts = [];
 // ========== 班別設定 ==========
 //
 // 班別（代碼、名稱、預定上下班、休息分鐘）由管理員在「班別設定」分頁維護，存在後端，
-// 見 GS/ShiftTemplates.gs。兩頭班休息前要打卡（一天最多兩組上下班，見 GS/PunchRules.gs），
+// 見 GS/ShiftTemplates.gs。兩頭班休息前要打卡（一天最多三組上下班，見 GS/PunchRules.gs），
 // 休息分鐘用在忘了打休息卡時補扣。
 
 let shiftTemplates = [];

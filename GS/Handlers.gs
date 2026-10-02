@@ -255,7 +255,7 @@ function handleLinePunchWithToken(params) {
       return { ok: false, code: 'ERR_DUPLICATE_PUNCH', msg: '您剛剛已經打過卡了，請勿重複操作' };
     }
 
-    // 一天最多兩組上下班（休息前要打卡），順序與次數見 PunchRules.gs
+    // 一天最多三組上下班（休息前要打卡），順序與次數見 PunchRules.gs
     const sequence = checkPunchSequence_(userId, punchType);
     if (!sequence.ok) return sequence;
 

@@ -332,7 +332,7 @@ function checkAttendanceAbnormal(attendanceRows) {
         Logger.log(` ${date}: 缺少下班卡`);
       }
 
-      // ⭐ 一天可以有兩組上下班（休息前打卡）：上班、下班都有，但次數對不上
+      // ⭐ 一天可以有多組上下班（休息前打卡）：上班、下班都有，但次數對不上
       const pendingAdjust = filteredRows.some(r => r.note === "補打卡" && r.audit === "?");
       const countedRows = filteredRows.filter(r => r.note !== "補打卡" || r.audit === "v");
       const inCount = countedRows.filter(r => r.type === "上班").length;

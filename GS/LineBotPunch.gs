@@ -382,7 +382,7 @@ function calculateMonthlyStats(groupedRecords, userId, yearMonth) {
   let completeDays = 0;
   
   dates.forEach(date => {
-    // 一天可能有兩組上下班（休息前打卡）：配成工作段再算，規則見 PunchRules.gs
+    // 一天可能有多組上下班（休息前打卡）：配成工作段再算，規則見 PunchRules.gs
     const punches = groupedRecords[date]
       .filter(r => (r.type === '上班' || r.type === '下班') && (r.note !== '補打卡' || r.audit === 'v'))
       .map(r => ({ type: r.type, time: r.timestamp instanceof Date ? r.timestamp : new Date(`${date} ${r.time}`) }))
@@ -1214,7 +1214,7 @@ function handleLineLocation(event) {
  */
 function determinePunchType(userId) {
   try {
-    // 一天可以有兩組上下班：上一次打上班就打下班，否則打上班（見 PunchRules.gs）
+    // 一天可以有多組上下班：上一次打上班就打下班，否則打上班（見 PunchRules.gs）
     return nextPunchType_(userId);
   } catch (error) {
     Logger.log(' determinePunchType 錯誤: ' + error);

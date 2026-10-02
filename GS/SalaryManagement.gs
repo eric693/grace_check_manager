@@ -1992,7 +1992,7 @@ function getEmployeeMonthlyAttendanceInternal(employeeId, yearMonth) {
       // 按時間排序
       dayPunches.sort((a, b) => a.fullDateTime - b.fullDateTime);
       
-      // 一天可以有兩組上下班（休息前打卡）：配成工作段再相加，規則見 PunchRules.gs
+      // 一天可以有多組上下班（休息前打卡）：配成工作段再相加，規則見 PunchRules.gs
       const punchIns = dayPunches.filter(p => p.type === '上班');
       const punchOuts = dayPunches.filter(p => p.type === '下班');
       const punchIn = punchIns.length > 0 ? punchIns[0].time : null;

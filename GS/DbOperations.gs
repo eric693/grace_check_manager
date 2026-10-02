@@ -382,7 +382,7 @@ function punch(sessionToken, type, lat, lng, note) {
     return { ok: false, code: "ERR_OUT_OF_RANGE" };
   }
 
-  // 一天最多兩組上下班（休息前要打卡），順序與次數見 PunchRules.gs
+  // 一天最多三組上下班（休息前要打卡），順序與次數見 PunchRules.gs
   if (type !== '上班' && type !== '下班') {
     return { ok: false, code: "ERR_INVALID_PUNCH_TYPE", msg: '打卡類型不正確' };
   }
@@ -696,7 +696,7 @@ function getAttendanceDetails(monthParam, userIdParam) {
         Logger.log(`   ${dateKey}: 有請假記錄，狀態設為 ${daily.reason}`);
       } else {
         // 原有的打卡狀態判斷
-        // 一天可以有兩組上下班（休息前打卡）：兩種卡都有但次數對不上，也算少打一張
+        // 一天可以有多組上下班（休息前打卡）：兩種卡都有但次數對不上，也算少打一張
         const counted = daily.record.filter(r => r.note !== '補打卡' || r.audit === 'v');
         const inCount = counted.filter(r => r.type === '上班').length;
         const outCount = counted.filter(r => r.type === '下班').length;
@@ -1495,7 +1495,7 @@ function getEmployeeMonthlyPunchData(employeeId, yearMonth) {
         };
       }
       
-      // 只記錄正常打卡或已核准的補打卡；一天可能有兩組上下班，全部留著配對
+      // 只記錄正常打卡或已核准的補打卡；一天可能有多組上下班，全部留著配對
       if (note !== '補打卡' || audit === 'v') {
         if (type === '上班' || type === '下班') {
           dailyData[dateKey].punches.push({ type: type, time: timestamp });
