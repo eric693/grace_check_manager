@@ -257,15 +257,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     await loadTranslations(detectLang());
     await loadUserPermissions();
     await loadShiftTemplates();
-    initializeTabs();
-    loadEmployees();
-    loadLocations();
-    loadShifts();
-    setupEventListeners();
-    setupBatchUpload();
-    
-    
-    // 設定預設日期為今天
+    // 篩選日期要先設成本週再載入排班，否則第一次會載入全部日期，跟畫面上的日期對不起來
     const today = todayStr();
     const shiftDateEl = document.getElementById('shift-date');
     if (shiftDateEl) shiftDateEl.value = today;
@@ -280,6 +272,13 @@ document.addEventListener('DOMContentLoaded', async function() {
     const filterEndEl = document.getElementById('filter-end-date');
     if (filterStartEl) filterStartEl.value = toLocalDateStr(startOfWeek);
     if (filterEndEl) filterEndEl.value = toLocalDateStr(endOfWeek);
+
+    initializeTabs();
+    loadEmployees();
+    loadLocations();
+    loadShifts();
+    setupEventListeners();
+    setupBatchUpload();
 });
 
 // ========== 分頁管理 ==========
@@ -317,7 +316,8 @@ function switchTab(tabName) {
     
     // 載入對應資料
     if (tabName === 'view') {
-        loadShifts();
+        // 照目前的篩選條件重新載入：新增、編輯、刪除後回到清單，篩選不會被清掉
+        filterShifts();
     } else if (tabName === 'stats') {
         loadStats();
     } else if (tabName === 'templates') {
@@ -1070,7 +1070,6 @@ async function addShift() {
             showMessage(t('SHIFT_ADD_SUCCESS'), 'success');
             resetForm();
             switchTab('view');
-            loadShifts();
         } else {
             showMessage(data.msg || t('SHIFT_ADD_FAILED'), 'error');
         }
@@ -1163,7 +1162,6 @@ async function updateShift(shiftId) {
             showMessage(t('SHIFT_UPDATE_SUCCESS'), 'success');
             resetForm();
             switchTab('view');
-            loadShifts();
         } else {
             showMessage(data.msg || t('SHIFT_UPDATE_FAILED'), 'error');
         }
@@ -1186,7 +1184,7 @@ async function deleteShift(shiftId) {
             if (editingShiftId === shiftId) resetForm();
             sameDayShifts = sameDayShifts.filter(s => s.shiftId !== shiftId);
             refreshSameDayShifts();
-            loadShifts();
+            filterShifts();
         } else {
             showMessage(data.msg || t('SHIFT_DELETE_FAILED'), 'error');
         }
@@ -1206,7 +1204,7 @@ function filterShifts() {
     
     //  新增：取得選擇的員工（多選）
     const employeesEl = document.getElementById('filter-employees');
-    const selectedEmployees = Array.from(employeesEl.selectedOptions)
+    const selectedEmployees = Array.from(employeesEl ? employeesEl.selectedOptions : [])
         .map(opt => opt.value)
         .filter(val => val !== ''); // 過濾掉「全部」選項
     
@@ -1428,9 +1426,8 @@ async function loadShiftsWithMultipleEmployees(filters = {}) {
                 const response = await apiRequestParams(queryParams);
                 const data = await response.json();
                 
-                if (data.ok && data.data) {
-                    allShifts = allShifts.concat(data.data);
-                }
+                if (!data.ok) throw new Error(data.msg || 'getShifts failed');
+                allShifts = allShifts.concat(data.data || []);
             }
             
             console.log(` 總共找到 ${allShifts.length} 筆排班`);
@@ -1450,9 +1447,8 @@ async function loadShiftsWithMultipleEmployees(filters = {}) {
             const response = await apiRequestParams(queryParams);
             const data = await response.json();
             
-            if (data.ok) {
-                allShifts = data.data || [];
-            }
+            if (!data.ok) throw new Error(data.msg || 'getShifts failed');
+            allShifts = data.data || [];
         }
         
         // 去除重複的排班（根據 shiftId）
@@ -1740,7 +1736,6 @@ async function confirmBatchUpload() {
             showMessage(data.msg || data.message || '批量上傳成功！', 'success');
             cancelBatchUpload();
             switchTab('view');
-            loadShifts();
         } else {
             let errorMsg = data.msg || data.message || '批量上傳失敗';
             

@@ -801,6 +801,8 @@ function handleUpdateShift(params) {
     Logger.log(' 更新排班: ' + params.shiftId);
     
     const updateData = {
+      employeeId: params.employeeId,
+      employeeName: params.employeeName,
       date: params.date,
       shiftType: params.shiftType,
       startTime: params.startTime,

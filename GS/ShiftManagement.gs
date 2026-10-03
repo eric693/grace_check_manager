@@ -477,6 +477,11 @@ function updateShift(shiftId, updateData) {
     
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === shiftId) {
+        // 編輯時可以把這個班改給另一位員工
+        if (updateData.employeeId) {
+          sheet.getRange(i + 1, 2).setValue(updateData.employeeId);
+          sheet.getRange(i + 1, 3).setValue(updateData.employeeName || '');
+        }
         if (updateData.date) sheet.getRange(i + 1, 4).setValue(formatDateOnly(updateData.date));
         if (updateData.shiftType) sheet.getRange(i + 1, 5).setValue(updateData.shiftType);
         // 有給休息分鐘就用；只換了班別沒給，就用新班別的休息分鐘
@@ -488,7 +493,8 @@ function updateShift(shiftId, updateData) {
         }
         if (updateData.startTime) sheet.getRange(i + 1, 6).setValue(formatTimeOnly(updateData.startTime));
         if (updateData.endTime) sheet.getRange(i + 1, 7).setValue(formatTimeOnly(updateData.endTime));
-        if (updateData.location) sheet.getRange(i + 1, 8).setValue(updateData.location);
+        // 地點可以清成空白（不指定地點）
+        if (updateData.location !== undefined) sheet.getRange(i + 1, 8).setValue(updateData.location);
         if (updateData.note !== undefined) sheet.getRange(i + 1, 9).setValue(updateData.note);
         
         sheet.getRange(i + 1, 12).setValue(formatDateTime(new Date()));
