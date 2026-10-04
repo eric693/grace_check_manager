@@ -47,6 +47,8 @@
             font-size: 16px;
             color: #666;
             transition: all 0.3s;
+            white-space: nowrap;
+            flex: none;
         }
 
         .shift-tab.active {
@@ -760,7 +762,18 @@
             .shift-tabs {
                 overflow-x: auto;
                 -webkit-overflow-scrolling: touch;
+                gap: 0;
             }
+
+            .shift-tab {
+                padding: 10px 14px;
+                font-size: 15px;
+            }
+
+            .grid-table { min-width: 640px; font-size: 13px; }
+            .grid-table .grid-name { min-width: 64px; }
+            .grid-cell { min-width: 80px; }
+            .grid-chip-time { font-size: 11px; }
 
             .form-row,
             .filter-row {
@@ -837,6 +850,64 @@
         .shift-templates-table .tpl-calc { font-variant-numeric: tabular-nums; color: #374151; white-space: nowrap; }
         .shift-templates-table tr.inactive td { opacity: 0.5; }
 
+        /* 週排班表 */
+        .grid-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .grid-nav { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .grid-nav .btn, .grid-toolbar > .btn { padding: 10px 16px; }
+        .grid-range { font-size: 18px; font-weight: 700; color: #222; min-width: 190px; text-align: center; }
+        .grid-hint { color: #666; font-size: 14px; margin: 4px 0 12px; }
+        .grid-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e5e7eb; border-radius: 10px; }
+        .grid-table { width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; font-size: 14px; transition: opacity .15s; }
+        .grid-table.grid-busy { opacity: .55; }
+        .grid-table th, .grid-table td { border-bottom: 1px solid #e5e7eb; border-right: 1px solid #f0f0f0; padding: 6px; vertical-align: top; }
+        .grid-table thead th { background: #f8fafc; text-align: center; font-weight: 600; color: #334155; position: sticky; top: 0; z-index: 2; }
+        .grid-table thead th.grid-off .grid-dow, .grid-table thead th.grid-off .grid-date { color: #dc2626; }
+        .grid-table thead th.grid-today { background: #e0ecff; }
+        .grid-dow { font-size: 13px; }
+        .grid-date { font-size: 16px; font-weight: 700; }
+        .grid-holiday { font-size: 11px; color: #dc2626; }
+        .grid-table .grid-name { position: sticky; left: 0; z-index: 1; background: #fff; text-align: left; font-weight: 600; white-space: nowrap; min-width: 96px; vertical-align: middle; }
+        .grid-table thead .grid-name { z-index: 3; background: #f8fafc; }
+        .grid-cell { min-width: 104px; height: 60px; }
+        .grid-cell.grid-today { background: #f5f9ff; }
+        .grid-editable { cursor: pointer; }
+        .grid-editable:hover, .grid-editable:focus { background: #eef4ff; outline: none; box-shadow: inset 0 0 0 2px #93b4f5; }
+        .grid-cell.grid-active { box-shadow: inset 0 0 0 2px #4285f4; background: #eef4ff; }
+        .grid-plus { display: block; text-align: center; color: #cbd5e1; font-size: 20px; line-height: 46px; }
+        .grid-editable:hover .grid-plus { color: #4285f4; }
+        .grid-chip { display: block; border-radius: 6px; padding: 4px 6px; margin-bottom: 4px; line-height: 1.25; }
+        .grid-chip:last-child { margin-bottom: 0; }
+        .grid-chip-name { display: block; font-weight: 700; font-size: 13px; }
+        .grid-chip-time { display: block; font-size: 12px; opacity: .85; font-variant-numeric: tabular-nums; }
+        .grid-total { text-align: center; white-space: nowrap; color: #334155; font-variant-numeric: tabular-nums; vertical-align: middle; }
+        .grid-table tfoot th, .grid-table tfoot td { background: #f8fafc; font-weight: 600; text-align: center; border-bottom: none; }
+        .grid-table tfoot .grid-name { background: #f8fafc; }
+        .grid-none { text-align: center; color: #777; padding: 24px; }
+        .grid-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font-size: 13px; color: #475569; }
+        .grid-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+        .grid-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; flex: none; }
+        .grid-menu { position: absolute; z-index: 1000; max-height: calc(100vh - 32px); overflow-y: auto; background: #fff; border-radius: 12px; box-shadow: 0 12px 32px rgba(15,23,42,.22); padding: 12px; border: 1px solid #e2e8f0; }
+        .grid-menu-title { font-weight: 700; font-size: 15px; margin-bottom: 8px; color: #0f172a; }
+        .grid-menu-section { margin-bottom: 8px; }
+        .grid-menu-current { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 8px; background: #f8fafc; border-radius: 8px; margin-bottom: 4px; font-size: 14px; }
+        .grid-menu-del { border: none; background: #ea4335; color: #fff; border-radius: 6px; padding: 4px 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .grid-menu-label { font-size: 12px; color: #64748b; margin: 4px 0 6px; }
+        .grid-menu-options { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+        .grid-menu-opt { display: flex; align-items: center; gap: 4px; width: 100%; text-align: left; border: 1px solid #e2e8f0; background: #fff; border-radius: 8px; padding: 9px 10px; cursor: pointer; font-size: 14px; }
+        .grid-menu-opt:hover { background: #f5f8ff; border-color: #93b4f5; }
+        .grid-menu-opt:focus-visible { outline: 2px solid #4285f4; outline-offset: 1px; }
+        .grid-menu-opt.grid-current { border-color: #4285f4; background: #eef4ff; }
+        .grid-current-tag { font-size: 11px; font-weight: 700; color: #fff; background: #4285f4; border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+        .grid-opt-name { font-weight: 600; flex: 1; }
+        .grid-opt-time { color: #64748b; font-size: 13px; font-variant-numeric: tabular-nums; }
+        .grid-menu-empty { color: #777; font-size: 13px; }
+        .grid-menu-footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; }
+        .grid-menu-footer button { border: none; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .grid-menu-off { background: #fee2e2; color: #991b1b; }
+        .grid-menu-custom { background: #e0e7ff; color: #3730a3; }
+        .grid-menu-close { background: #f1f5f9; color: #334155; margin-left: auto; }
+        .grid-menu button:disabled { opacity: .5; cursor: wait; }
+
         /* 固定班表 */
         .weekly-table { min-width: 760px; }
         .weekly-table td:first-child { text-align: left; font-weight: 600; white-space: nowrap; }
@@ -857,7 +928,8 @@
         </div>
 
         <div class="shift-tabs">
-            <button class="shift-tab active" data-tab="view" data-i18n="SHIFT_TAB_VIEW">查看排班</button>
+            <button class="shift-tab active" data-tab="grid" data-i18n="SHIFT_TAB_GRID">週排班表</button>
+            <button class="shift-tab" data-tab="view" data-i18n="SHIFT_TAB_VIEW">查看排班</button>
             <button class="shift-tab" data-tab="add" data-i18n="SHIFT_TAB_ADD">新增排班</button>
             <button class="shift-tab" data-tab="batch" data-i18n="SHIFT_TAB_BATCH">批量排班</button>
             <button class="shift-tab" data-tab="weekly" data-i18n="SHIFT_TAB_WEEKLY">固定班表</button>
@@ -866,7 +938,27 @@
         </div>
 
         <!-- 查看排班 -->
-        <div id="view-tab" class="tab-content active">
+        <!-- 週排班表：一人一列、一週七天，點格子排班 -->
+        <div id="grid-tab" class="tab-content active">
+            <div class="shift-card">
+                <div class="grid-toolbar">
+                    <div class="grid-nav">
+                        <button type="button" id="grid-prev" class="btn btn-secondary" data-i18n="GRID_PREV">‹ 上週</button>
+                        <div id="grid-range" class="grid-range" aria-live="polite"></div>
+                        <button type="button" id="grid-next" class="btn btn-secondary" data-i18n="GRID_NEXT">下週 ›</button>
+                        <button type="button" id="grid-today" class="btn btn-secondary" data-i18n="GRID_THIS_WEEK">本週</button>
+                    </div>
+                    <button type="button" id="grid-apply-pattern" class="btn btn-primary" data-i18n="GRID_APPLY_PATTERN">套用固定班表到這週</button>
+                </div>
+                <p id="grid-hint" class="grid-hint"></p>
+                <div class="grid-scroll">
+                    <table id="grid-table" class="grid-table"></table>
+                </div>
+                <div id="grid-legend" class="grid-legend"></div>
+            </div>
+        </div>
+
+        <div id="view-tab" class="tab-content">
             <div class="filter-section">
                 <h3 data-i18n="SHIFT_FILTER_TITLE">篩選條件</h3>
                 <div class="filter-row">
@@ -1150,6 +1242,7 @@
     <script src="holidays.js"></script>
     <script src="help.js"></script>
     <script src="shift.js"></script>
+    <script src="shift-grid.js"></script>
     <script src="pwa.js"></script>
 </body>
 </html>

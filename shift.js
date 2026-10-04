@@ -6,6 +6,7 @@
 // ========== 全域變數 ==========
 let currentShifts = [];
 let allEmployees = [];
+let employeesReady = Promise.resolve();   // 員工名單載完（週排班表要等它）
 let allLocations = [];
 let batchData = [];
 // 語系相關（translations / currentLang / t / loadTranslations / renderTranslations）
@@ -453,11 +454,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (filterEndEl) filterEndEl.value = toLocalDateStr(endOfWeek);
 
     initializeTabs();
-    loadEmployees();
+    employeesReady = loadEmployees();
     loadLocations();
     loadShifts();
     setupEventListeners();
     setupBatchUpload();
+    if (typeof initShiftGrid === 'function') initShiftGrid();
 });
 
 // ========== 分頁管理 ==========
@@ -494,7 +496,9 @@ function switchTab(tabName) {
     document.getElementById(`${tabName}-tab`).classList.add('active');
     
     // 載入對應資料
-    if (tabName === 'view') {
+    if (tabName === 'grid') {
+        if (typeof loadShiftGrid === 'function') loadShiftGrid();
+    } else if (tabName === 'view') {
         // 照目前的篩選條件重新載入：新增、編輯、刪除後回到清單，篩選不會被清掉
         filterShifts();
     } else if (tabName === 'stats') {
