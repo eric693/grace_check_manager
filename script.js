@@ -210,16 +210,23 @@ async function loadAbnormalRecordsInBackground() {
 /** 待打的 QR 卡 → 帶過 LINE 登入的字串（base64url 的 JSON） */
 function encodeLoginResume() {
     const q = sessionStorage.getItem('pendingQRToken');
-    if (!q) return '';
-    const l = sessionStorage.getItem('pendingQRLoc') || '';
-    const json = JSON.stringify(l ? { q: q, l: l } : { q: q });
+    const b = sessionStorage.getItem('pendingBindCode');   // LINE 綁定連結（見 GS/LoginLinks.gs）
+    if (!q && !b) return '';
+    const data = {};
+    if (q) {
+        data.q = q;
+        const l = sessionStorage.getItem('pendingQRLoc') || '';
+        if (l) data.l = l;
+    }
+    if (b) data.b = b;
+    const json = JSON.stringify(data);
     const bytes = new TextEncoder().encode(json);
     let binary = '';
     bytes.forEach(b => { binary += String.fromCharCode(b); });
     return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** LINE 登入回來的 state → { q, l }；不是我們放的就回傳 null */
+/** LINE 登入回來的 state → { q, l, b }（QR 代碼、地點、綁定代碼，沒有的是空字串）；不是我們放的就回傳 null */
 function decodeLoginResume(state) {
     const dot = String(state || '').indexOf('.');
     if (dot === -1) return null;
@@ -228,9 +235,11 @@ function decodeLoginResume(state) {
         const binary = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
         const json = new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
         const data = JSON.parse(json);
-        return data && typeof data.q === 'string' && /^[IO]_[0-9A-Fa-f]+_[0-9a-f]+$/.test(data.q)
-            ? { q: data.q, l: typeof data.l === 'string' ? data.l : '' }
-            : null;
+        if (!data) return null;
+        const q = typeof data.q === 'string' && /^[IO]_[0-9A-Fa-f]+_[0-9a-f]+$/.test(data.q) ? data.q : '';
+        const b = typeof data.b === 'string' && /^[0-9a-f]{64}$/.test(data.b) ? data.b : '';
+        if (!q && !b) return null;
+        return { q: q, l: q && typeof data.l === 'string' ? data.l : '', b: b };
     } catch (error) {
         return null;
     }
@@ -1945,7 +1954,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 從 LINE 登入回來：QR 代碼接在 state 後面帶回來（見 GS 的 handleGetLoginUrl）。
     // LINE App 常會在另一個分頁或瀏覽器打開回來的網址，sessionStorage 已經沒有了，要從這裡取回。
     const resumeQr = decodeLoginResume(params.get('state'));
-    if (otoken && resumeQr) {
+    if (otoken && resumeQr && resumeQr.q) {
         sessionStorage.setItem('pendingQRToken', resumeQr.q);
         if (resumeQr.l) sessionStorage.setItem('pendingQRLoc', resumeQr.l);
         else sessionStorage.removeItem('pendingQRLoc');
@@ -1953,22 +1962,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const loginCode = params.get('loginCode');
 
+    // 管理員給的「LINE 綁定連結」：記下來，直接帶去 LINE 登入，回來時把綁定代碼一起送給後端
+    const bindCodeFromUrl = params.get('bindCode');
+    if (bindCodeFromUrl && /^[0-9a-f]{64}$/.test(bindCodeFromUrl) && !otoken) {
+        sessionStorage.setItem('pendingBindCode', bindCodeFromUrl);
+        history.replaceState({}, '', window.location.pathname);
+        setElementText('status', t('BIND_REDIRECTING'));
+        showNotification(t('BIND_REDIRECTING'), 'info');
+        await startLineLogin();
+        return;
+    }
+    const bindCode = otoken ? ((resumeQr && resumeQr.b) || sessionStorage.getItem('pendingBindCode') || '') : '';
+
     if (otoken || loginCode) {
         try {
             // LINE 登入回來帶 code；管理員給的登入連結帶 loginCode（不經過 LINE，見 GS/LoginLinks.gs）
             const res = otoken
-                ? await callApifetch(`getProfile&otoken=${otoken}`)
+                ? await callApifetch(`getProfile&otoken=${otoken}` + (bindCode ? `&bindCode=${bindCode}` : ''))
                 : await callApifetch(`redeemLoginLink&loginCode=${encodeURIComponent(loginCode)}`);
             // 清除 URL 參數（登入代碼不留在網址列與瀏覽紀錄）
             history.replaceState({}, '', window.location.pathname);
+            if (bindCode) sessionStorage.removeItem('pendingBindCode');
             if (res.ok && res.sToken) {
                 if (loginCode) {
                     // 記住這個瀏覽器是用連結登入的：之後就算登出，掃 QR Code 也不要自動帶去 LINE
                     try { localStorage.setItem('loginByLink', '1'); } catch (e) { /* 私密模式等 */ }
                 }
                 await applyLoginResult(res);
+                // 放在登入成功訊息之後，才不會被蓋掉
+                if (res.bound) showNotification(t('BIND_SUCCESS', { name: res.bound.name }), 'success');
             } else {
-                const failMsg = loginCode
+                const failMsg = (loginCode || bindCode)
                     ? (res.code && t(res.code) !== res.code ? t(res.code) : (res.msg || t('LOGIN_LINK_INVALID')))
                     : t("ERROR_LOGIN_FAILED", { msg: res.msg || t("UNKNOWN_ERROR") });
                 showNotification(failMsg, "error");

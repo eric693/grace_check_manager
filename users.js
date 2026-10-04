@@ -84,6 +84,7 @@ function renderUsersList(users) {
                     ${isAdmin ? `<span class="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full whitespace-nowrap">${escapeHtml(t('ROLE_ADMIN'))}</span>` : 
                       isScheduler ? `<span class="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full whitespace-nowrap">${escapeHtml(t('ROLE_SCHEDULER'))}</span>` :
                       `<span class="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full whitespace-nowrap">${escapeHtml(t('ROLE_EMPLOYEE'))}</span>`}
+                    ${isPreCreated(user) ? `<span class="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs rounded-full whitespace-nowrap">${escapeHtml(t('BIND_BADGE_NOT_BOUND'))}</span>` : ''}
                 </div>
                 
                 <p class="text-xs text-gray-600 dark:text-gray-400 mb-2 truncate">
@@ -126,6 +127,11 @@ function renderUsersList(users) {
                             </button>
                         `}
                         
+                        ${isPreCreated(user) ? `
+                        <button onclick="openLoginLinkDialog('${escapeJsAttr(user.userId)}', '${escapeJsAttr(user.name)}', 'bind')"
+                                class="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded-md transition-colors">
+                            ${escapeHtml(t('BIND_LINK_BTN'))}
+                        </button>` : ''}
                         <button onclick="openLoginLinkDialog('${escapeJsAttr(user.userId)}', '${escapeJsAttr(user.name)}')"
                                 class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md transition-colors">
                             ${escapeHtml(t('LOGIN_LINK_BTN'))}
@@ -683,7 +689,12 @@ function openUsersDialog(id, innerHtml) {
     return dialog;
 }
 
-/** 管理員：建立沒有 LINE 的員工，建立後直接產生他的登入連結 */
+/** 管理員事先建立、還沒綁 LINE 的員工（ID 是 M 開頭，LINE 的是 U 開頭） */
+function isPreCreated(user) {
+    return /^M/.test(String(user.userId || ''));
+}
+
+/** 管理員：先建立員工（還沒登入也能排班），建立後直接產生 LINE 綁定連結 */
 function openNoLineEmployeeDialog() {
     const dialog = openUsersDialog('no-line-employee-dialog', `
         <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${escapeHtml(t('NO_LINE_ADD_TITLE'))}</h3>
@@ -720,7 +731,7 @@ function openNoLineEmployeeDialog() {
             closeUsersDialog('no-line-employee-dialog');
             showNotification(t('NO_LINE_CREATED', { name: res.name }), 'success');
             if (typeof loadAllUsers === 'function') loadAllUsers();
-            openLoginLinkDialog(res.userId, res.name);
+            openLoginLinkDialog(res.userId, res.name, 'bind');
         } catch (error) {
             console.error('建立員工失敗:', error);
             showNotification(t('NO_LINE_CREATE_FAILED'), 'error');
@@ -730,24 +741,29 @@ function openNoLineEmployeeDialog() {
     setTimeout(() => dialog.querySelector('#no-line-name').focus(), 50);
 }
 
-/** 管理員：替員工產生一次性登入連結，顯示連結與 QR Code */
-async function openLoginLinkDialog(userId, userName) {
+/**
+ * 管理員：替員工產生一次性連結，顯示連結與 QR Code
+ * purpose 'bind' = LINE 綁定連結（員工打開後用 LINE 登入，接上事先建立的資料）；省略 = 登入連結（不用 LINE）
+ */
+async function openLoginLinkDialog(userId, userName, purpose) {
+    const bind = purpose === 'bind';
+    const titleKey = bind ? 'BIND_LINK_TITLE' : 'LOGIN_LINK_TITLE';
     const dialog = openUsersDialog('login-link-dialog', `
-        <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${escapeHtml(t('LOGIN_LINK_TITLE', { name: userName }))}</h3>
+        <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${escapeHtml(t(titleKey, { name: userName }))}</h3>
         <p class="text-sm text-gray-600 dark:text-gray-300" data-body>${escapeHtml(t('LOADING'))}</p>`);
     try {
-        const res = await callApifetch(`createLoginLink&userId=${encodeURIComponent(userId)}`);
+        const res = await callApifetch(`createLoginLink&userId=${encodeURIComponent(userId)}` + (bind ? '&purpose=bind' : ''));
         if (!document.body.contains(dialog)) return;
         if (!res.ok) {
             dialog.querySelector('[data-body]').textContent = res.msg || t('LOGIN_LINK_FAILED');
             return;
         }
         const base = API_CONFIG.redirectUrl.replace(/\/?$/, '/');
-        const url = `${base}?loginCode=${encodeURIComponent(res.code)}`;
+        const url = `${base}?${bind ? 'bindCode' : 'loginCode'}=${encodeURIComponent(res.code)}`;
         const expires = new Date(res.expiresAt).toLocaleString();
         dialog.firstElementChild.innerHTML = `
-            <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${escapeHtml(t('LOGIN_LINK_TITLE', { name: userName }))}</h3>
-            <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">${escapeHtml(t('LOGIN_LINK_DESC'))}</p>
+            <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${escapeHtml(t(titleKey, { name: userName }))}</h3>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">${escapeHtml(t(bind ? 'BIND_LINK_DESC' : 'LOGIN_LINK_DESC'))}</p>
             <div class="flex justify-center bg-white p-3 rounded-lg mb-3" data-qr></div>
             <div class="flex gap-2 mb-2">
                 <input type="text" readonly value="${escapeHtml(url)}" data-url
@@ -755,7 +771,7 @@ async function openLoginLinkDialog(userId, userName) {
                 <button type="button" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg" data-copy>${escapeHtml(t('KIOSK_COPY_BTN'))}</button>
             </div>
             <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">${escapeHtml(t('LOGIN_LINK_EXPIRES', { time: expires }))}</p>
-            <p class="text-xs text-amber-600 dark:text-amber-400 mb-4">${escapeHtml(t('LOGIN_LINK_WARNING'))}</p>
+            <p class="text-xs text-amber-600 dark:text-amber-400 mb-4">${escapeHtml(t(bind ? 'BIND_LINK_WARNING' : 'LOGIN_LINK_WARNING'))}</p>
             <button type="button" class="w-full px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg font-semibold" data-close>${escapeHtml(t('BTN_CLOSE'))}</button>`;
         if (typeof QRCode === 'function') {
             new QRCode(dialog.querySelector('[data-qr]'), { text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M });

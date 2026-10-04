@@ -70,10 +70,18 @@ function handleGetAllBonusRecords(params) {
  */
 // Handlers.gs - 修改 handleGetProfile
 
-function handleGetProfile(code) {
+function handleGetProfile(code, bindCode) {
   try {
     const tokenResp = exchangeCodeForToken_(code);
     const profile = getLineUserInfo_(tokenResp);
+
+    // 打開「LINE 綁定連結」來的：先把管理員事先建立的員工接到這個 LINE（見 LoginLinks.gs）
+    let bound = null;
+    if (bindCode) {
+      bound = bindLineAccount_(bindCode, profile.userId);
+      if (!bound.ok) return { ok: false, code: bound.code || 'BIND_LINK_INVALID', msg: bound.msg };
+    }
+
     const sToken = writeSession_(profile.userId);
     const employee = writeEmployee_(profile);
     
@@ -83,11 +91,13 @@ function handleGetProfile(code) {
       code: "WELCOME_BACK",
       params: { name: profile.displayName },
       sToken: sToken,
+      bound: bound ? { name: bound.name, merged: bound.merged } : null,
       user: {
         userId: profile.userId,
         employeeId: profile.userId,
         email: profile.email || "",
-        name: profile.displayName,
+        // 管理員設定過的姓名（I 欄）優先，跟系統其他地方一致
+        name: (employee && employee[8]) || profile.displayName,
         picture: profile.pictureUrl,
         dept: employee[5] || "員工",
         status: "啟用"

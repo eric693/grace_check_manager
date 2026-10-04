@@ -167,7 +167,7 @@ function doGet(e) {
     switch (action) {
       // ==================== 登入與 Session ====================
       case "getProfile":
-        return respond1(handleGetProfile(code));
+        return respond1(handleGetProfile(code, e.parameter.bindCode));
       case "getLoginUrl":
         return respond1(handleGetLoginUrl(e.parameter));
       case "checkSession":

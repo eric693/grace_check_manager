@@ -10,9 +10,15 @@
 //
 // 沒有 LINE 的新員工由管理員直接建立，員工ID 用「M」開頭（LINE 的是「U」開頭），
 // 系統發 LINE 通知時會跳過這些人。
+//
+// 先建立、之後再綁 LINE：管理員可以在員工還沒登入前就建立他、排班、設假期。
+// 之後產生「LINE 綁定連結」（用途 bind）給員工，員工打開後用 LINE 登入，
+// bindLineAccount_ 會把整份試算表裡這個 M 開頭的員工ID 換成他的 LINE ID，
+// 排班、假期、打卡、薪資設定全部接上，之後就跟一般 LINE 員工一樣（收得到通知、能用 LINE 打卡）。
 
 const SHEET_LOGIN_LINKS = '登入連結';
-const LOGIN_LINK_HEADERS = ['連結雜湊', '員工ID', '建立時間', '到期時間', '使用時間', '建立者', '狀態'];
+const LOGIN_LINK_HEADERS = ['連結雜湊', '員工ID', '建立時間', '到期時間', '使用時間', '建立者', '狀態', '用途'];
+const LOGIN_LINK_PURPOSE_BIND = 'bind';   // 用途空白 = 一般登入連結
 const LOGIN_LINK_DEFAULT_HOURS = 72;
 const LOGIN_LINK_MAX_HOURS = 24 * 14;
 // 同一位員工最多同時保留幾個登入中的裝置（多的從最舊的開始登出）
@@ -30,6 +36,8 @@ function getLoginLinkSheet_() {
     sheet.setFrozenRows(1);
     sheet.getRange(1, 1, 1, LOGIN_LINK_HEADERS.length)
          .setFontWeight('bold').setBackground('#4a5568').setFontColor('#ffffff');
+  } else if (sheet.getRange(1, 8).getValue() === '') {
+    sheet.getRange(1, 8).setValue('用途');   // 加「用途」欄之前建立的表
   }
   return sheet;
 }
@@ -132,6 +140,11 @@ function handleCreateLoginLink(params) {
     return { ok: false, code: 'LOGIN_LINK_INACTIVE', msg: '這位員工已停用或離職，不能產生登入連結' };
   }
 
+  const purpose = params.purpose === LOGIN_LINK_PURPOSE_BIND ? LOGIN_LINK_PURPOSE_BIND : '';
+  if (purpose === LOGIN_LINK_PURPOSE_BIND && isLineUserId_(userId)) {
+    return { ok: false, code: 'BIND_ALREADY_LINE', msg: '這位員工已經綁定 LINE 了' };
+  }
+
   const hours = parseInt(params.hours, 10) || LOGIN_LINK_DEFAULT_HOURS;
   if (hours < 1 || hours > LOGIN_LINK_MAX_HOURS) {
     return { ok: false, code: 'LOGIN_LINK_HOURS', msg: `有效時間需介於 1～${LOGIN_LINK_MAX_HOURS} 小時` };
@@ -144,7 +157,7 @@ function handleCreateLoginLink(params) {
     const data = sheet.getDataRange().getValues();
     // 舊的、還沒用過的連結作廢：傳錯人或外流時，重新產生一次就好
     for (let i = 1; i < data.length; i++) {
-      if (String(data[i][1]) === userId && String(data[i][6]) === '有效') {
+      if (String(data[i][1]) === userId && String(data[i][6]) === '有效' && String(data[i][7] || '') === purpose) {
         sheet.getRange(i + 1, 7).setValue('已作廢');
       }
     }
@@ -152,9 +165,9 @@ function handleCreateLoginLink(params) {
     const code = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
     const now = new Date();
     const expiresAt = new Date(now.getTime() + hours * 60 * 60 * 1000);
-    sheet.appendRow([hashLoginCode_(code), userId, now, expiresAt, '', admin.name || admin.userId, '有效']);
+    sheet.appendRow([hashLoginCode_(code), userId, now, expiresAt, '', admin.name || admin.userId, '有效', purpose]);
 
-    return { ok: true, code: code, expiresAt: expiresAt.getTime(), userId: userId };
+    return { ok: true, code: code, expiresAt: expiresAt.getTime(), userId: userId, purpose: purpose };
   } finally {
     lock.releaseLock();
   }
@@ -180,6 +193,9 @@ function handleRedeemLoginLink(params) {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] !== hash) continue;
 
+      if (String(data[i][7] || '') === LOGIN_LINK_PURPOSE_BIND) {
+        return { ok: false, code: 'BIND_LINK_NOT_LOGIN', msg: '這是 LINE 綁定連結，請用 LINE 登入完成綁定' };
+      }
       if (String(data[i][6]) !== '有效') {
         return { ok: false, code: 'LOGIN_LINK_USED', msg: '這個登入連結已經用過或已作廢，請向管理員索取新的' };
       }
@@ -213,6 +229,80 @@ function handleRedeemLoginLink(params) {
     }
 
     return { ok: false, code: 'LOGIN_LINK_INVALID', msg: '登入連結無效' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 用「LINE 綁定連結」把先建立的員工（M 開頭）接到他的 LINE 帳號。
+ * 在 handleGetProfile 拿到 LINE 資料之後、寫 session 之前呼叫。
+ *
+ * 這個 LINE 之前已經自己登入過（員工名單已有一列）：刪掉那一列和他的假期餘額列，
+ * 以管理員先建立的資料為準；他之前的打卡等紀錄會跟著合併到同一個人。
+ *
+ * @returns {{ok: boolean, name?: string, code?: string, msg?: string}}
+ */
+function bindLineAccount_(bindCode, lineUserId) {
+  const code = String(bindCode || '').trim();
+  if (!/^[0-9a-f]{64}$/.test(code)) return { ok: false, code: 'BIND_LINK_INVALID', msg: 'LINE 綁定連結無效' };
+  if (!isLineUserId_(lineUserId)) return { ok: false, code: 'BIND_LINK_INVALID', msg: 'LINE 帳號資料不正確' };
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const sheet = getLoginLinkSheet_();
+    const data = sheet.getDataRange().getValues();
+    const hash = hashLoginCode_(code);
+
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] !== hash || String(data[i][7] || '') !== LOGIN_LINK_PURPOSE_BIND) continue;
+      if (String(data[i][6]) !== '有效') {
+        return { ok: false, code: 'LOGIN_LINK_USED', msg: '這個綁定連結已經用過或已作廢，請向管理員索取新的' };
+      }
+      if (new Date() > new Date(data[i][3])) {
+        return { ok: false, code: 'LOGIN_LINK_EXPIRED', msg: '綁定連結已過期，請向管理員索取新的' };
+      }
+
+      const oldId = String(data[i][1]).trim();
+      const employee = findEmployeeRow_(oldId);
+      if (!employee || String(employee.values[EMPLOYEE_COL.STATUS] || '啟用').trim() !== '啟用') {
+        return { ok: false, code: 'LOGIN_LINK_INACTIVE', msg: '這個帳號已停用，請聯絡管理員' };
+      }
+      const name = String(employee.values[8] || employee.values[2] || '').trim();
+
+      // 先標記用過：就算後面出錯，連結也不能再用第二次
+      sheet.getRange(i + 1, 5, 1, 3).setValues([[new Date(), data[i][5], '已使用']]);
+
+      // 這個 LINE 已經自己登入過：刪掉自動建立的那一列，以管理員建立的資料為準
+      const existing = findEmployeeRow_(lineUserId);
+      if (existing) {
+        ss.getSheetByName(SHEET_EMPLOYEES).deleteRow(existing.row);
+        const balance = ss.getSheetByName('假期餘額');
+        if (balance) {
+          const values = balance.getDataRange().getValues();
+          const hasOld = values.some((r, k) => k > 0 && String(r[0]).trim() === oldId);
+          for (let k = values.length - 1; k >= 1 && hasOld; k--) {
+            if (String(values[k][0]).trim() === lineUserId) balance.deleteRow(k + 1);
+          }
+        }
+      }
+
+      // 整份試算表裡「整格等於舊ID」的都換成 LINE ID（排班、假期、打卡、薪資設定、session…）
+      const replaced = ss.createTextFinder(oldId).matchCase(true).matchEntireCell(true).replaceAllWith(lineUserId);
+      Logger.log(` LINE 綁定：${name} ${oldId} → ${lineUserId}，更新 ${replaced} 格${existing ? '（合併了原本自動建立的帳號）' : ''}`);
+
+      try {
+        getAdminAuditSheet_().appendRow([new Date(), lineUserId, name, 'bindLineAccount', '員工綁定 LINE',
+          lineUserId, name, `原員工ID=${oldId}, 更新 ${replaced} 格${existing ? ', 合併了已登入過的帳號' : ''}`]);
+      } catch (error) {
+        Logger.log(' 寫入綁定記錄失敗: ' + error.message);
+      }
+      return { ok: true, name: name, merged: !!existing };
+    }
+
+    return { ok: false, code: 'BIND_LINK_INVALID', msg: 'LINE 綁定連結無效' };
   } finally {
     lock.releaseLock();
   }
