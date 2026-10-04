@@ -1522,8 +1522,25 @@
                                         disabled>
                                     新增地點
                                 </button>
+                                <button data-i18n="LOCATION_EDIT_CANCEL"
+                                        id="cancel-location-edit-btn"
+                                        type="button"
+                                        class="w-full py-3 px-4 rounded-lg font-bold btn-secondary hidden">
+                                    取消修改
+                                </button>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- 打卡地點列表：管理員可以修改、刪除 -->
+                    <div class="card p-6 mt-6">
+                        <div class="flex items-center justify-between mb-2">
+                            <h2 data-i18n="LOCATION_LIST_TITLE" class="text-xl font-bold text-gray-800 dark:text-white">打卡地點列表</h2>
+                            <button type="button" id="refresh-locations-btn" data-i18n="LOCATION_REFRESH"
+                                    class="text-sm px-3 py-1 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200">重新整理</button>
+                        </div>
+                        <p data-i18n="LOCATION_LIST_DESC" class="text-gray-500 dark:text-gray-400 mb-4 text-sm">員工要在這些地點的範圍內才能打卡。按「編輯」會把地點帶到上方表單，可以改名稱、拖曳地圖調整位置或改打卡範圍。</p>
+                        <ul id="location-admin-list" class="space-y-3"></ul>
                     </div>
                     <!-- 在管理員頁面的適當位置加入 -->
                     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6">

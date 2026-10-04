@@ -959,19 +959,166 @@ function getApprovedOvertimeRecords(monthParam, userIdParam) {
  * @param {number} radius - 打卡範圍（公尺），預設 200，範圍 30-2000
  */
 function addLocation(name, lat, lng, radius) {
-  if (!name || !lat || !lng) {
-    return { ok: false, code: "ERR_INVALID_INPUT" };
+  const input = validateLocationInput_(name, lat, lng, radius);
+  if (!input.ok) return input;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_LOCATIONS);
+    if (findLocationRowByName_(sh, input.name) > 0) {
+      return { ok: false, code: 'ERR_LOCATION_DUPLICATE', msg: `已經有叫「${input.name}」的地點` };
+    }
+    sh.appendRow([newLocationId_(), input.name, input.lat, input.lng, input.radius]);
+  } finally {
+    lock.releaseLock();
   }
-  
-  // 驗證 radius 參數，確保在合理範圍內
-  const validRadius = radius && !isNaN(radius) ? parseInt(radius) : 200;
-  const finalRadius = Math.max(30, Math.min(2000, validRadius)); // 限制在 30-2000 之間
-  
-  const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_LOCATIONS);
-  sh.appendRow(["", name, lat, lng, finalRadius]);
-  
-  Logger.log(` 新增地點：${name}，範圍：${finalRadius}公尺`);
+
+  Logger.log(` 新增地點：${input.name}，範圍：${input.radius}公尺`);
   return { ok: true, code: "LOCATION_ADD_SUCCESS" };
+}
+
+// 打卡地點表的欄位：A ID、B 地點名稱、C 緯度、D 經度、E 容許誤差(公尺)（punch() 也是照這個位置讀）
+const LOCATION_RADIUS_MIN = 30;
+const LOCATION_RADIUS_MAX = 2000;
+
+function newLocationId_() {
+  return 'LOC-' + Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+}
+
+/** 檢查並整理地點欄位；不合法回傳 { ok: false, ... } */
+function validateLocationInput_(name, lat, lng, radius) {
+  const cleanName = String(name || '').trim();
+  const latNum = Number(lat);
+  const lngNum = Number(lng);
+  if (!cleanName || cleanName.length > 50 || /[<>]/.test(cleanName)) {
+    return { ok: false, code: 'ERR_INVALID_INPUT', msg: '地點名稱要填，最多 50 個字' };
+  }
+  if (String(lat).trim() === '' || String(lng).trim() === '' || !isFinite(latNum) || !isFinite(lngNum) ||
+      Math.abs(latNum) > 90 || Math.abs(lngNum) > 180) {
+    return { ok: false, code: 'ERR_INVALID_INPUT', msg: '經緯度不正確' };
+  }
+  // 範圍沒給或不是數字用 200；超出就夾在 30～2000 之間
+  const r = parseInt(radius, 10);
+  const finalRadius = isNaN(r) ? 200 : Math.max(LOCATION_RADIUS_MIN, Math.min(LOCATION_RADIUS_MAX, r));
+  return { ok: true, name: cleanName, lat: latNum, lng: lngNum, radius: finalRadius };
+}
+
+/** 同名地點在第幾列（1-based，找不到回傳 -1）；exceptRow 是自己那一列，改名時不算重複 */
+function findLocationRowByName_(sheet, name, exceptRow) {
+  const values = sheet.getDataRange().getValues();
+  const key = String(name).trim().toLowerCase();
+  for (let i = 1; i < values.length; i++) {
+    if (i + 1 === exceptRow) continue;
+    if (String(values[i][1] || '').trim().toLowerCase() === key) return i + 1;
+  }
+  return -1;
+}
+
+/** 舊資料的 ID 欄是空的：補上 ID，管理員才能指定要改或刪哪一個 */
+function ensureLocationIds_(sheet) {
+  const last = sheet.getLastRow();
+  if (last < 2) return;
+  const range = sheet.getRange(2, 1, last - 1, 2);
+  const values = range.getValues();
+  if (!values.some(row => row[1] && !String(row[0] || '').trim())) return;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const fresh = range.getValues();
+    let changed = false;
+    fresh.forEach(row => {
+      if (row[1] && !String(row[0] || '').trim()) {
+        row[0] = newLocationId_();
+        changed = true;
+      }
+    });
+    if (changed) sheet.getRange(2, 1, fresh.length, 1).setValues(fresh.map(row => [row[0]]));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function findLocationRowById_(sheet, id) {
+  const key = String(id || '').trim();
+  if (!key) return -1;
+  const values = sheet.getDataRange().getValues();
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0] || '').trim() === key) return i + 1;
+  }
+  return -1;
+}
+
+/**
+ * 修改打卡地點。改名時，排班表與固定班表裡寫的舊名稱一起換成新名稱。
+ */
+function updateLocation(id, name, lat, lng, radius) {
+  const input = validateLocationInput_(name, lat, lng, radius);
+  if (!input.ok) return input;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_LOCATIONS);
+    const row = findLocationRowById_(sh, id);
+    if (row < 0) return { ok: false, code: 'ERR_LOCATION_NOT_FOUND', msg: '找不到這個地點，請重新整理' };
+    if (findLocationRowByName_(sh, input.name, row) > 0) {
+      return { ok: false, code: 'ERR_LOCATION_DUPLICATE', msg: `已經有叫「${input.name}」的地點` };
+    }
+
+    const oldName = String(sh.getRange(row, 2).getValue() || '').trim();
+    sh.getRange(row, 2, 1, 4).setValues([[input.name, input.lat, input.lng, input.radius]]);
+
+    let renamed = 0;
+    if (oldName && oldName !== input.name) {
+      renamed += renameLocationInColumn_('排班表', 8, oldName, input.name);
+      if (typeof SHEET_WEEKLY_PATTERN !== 'undefined') {
+        renamed += renameLocationInColumn_(SHEET_WEEKLY_PATTERN, 5, oldName, input.name);
+      }
+    }
+    Logger.log(` 修改地點：${oldName} → ${input.name}，範圍 ${input.radius} 公尺，連帶更新 ${renamed} 筆排班`);
+    return { ok: true, code: 'LOCATION_UPDATE_SUCCESS', renamed: renamed };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 把某張表某一欄等於 oldName 的格子換成 newName，回傳改了幾格（過去的打卡紀錄不改） */
+function renameLocationInColumn_(sheetName, col, oldName, newName) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  const range = sheet.getRange(2, col, sheet.getLastRow() - 1, 1);
+  const values = range.getValues();
+  let count = 0;
+  values.forEach(row => {
+    if (String(row[0] || '').trim() === oldName) { row[0] = newName; count++; }
+  });
+  if (count) range.setValues(values);
+  return count;
+}
+
+/**
+ * 刪除打卡地點。至少要留一個，否則所有人都不能打卡（punch() 會回 ERR_NO_LOCATIONS）。
+ */
+function deleteLocation(id) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_LOCATIONS);
+    const row = findLocationRowById_(sh, id);
+    if (row < 0) return { ok: false, code: 'ERR_LOCATION_NOT_FOUND', msg: '找不到這個地點，請重新整理' };
+    const remaining = sh.getDataRange().getValues().slice(1).filter(r => r[1]).length;
+    if (remaining <= 1) {
+      return { ok: false, code: 'ERR_LOCATION_LAST', msg: '至少要保留一個打卡地點，否則員工無法打卡' };
+    }
+    const name = sh.getRange(row, 2).getValue();
+    sh.deleteRow(row);
+    Logger.log(` 刪除地點：${name}`);
+    return { ok: true, code: 'LOCATION_DELETE_SUCCESS' };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -979,21 +1126,23 @@ function addLocation(name, lat, lng, radius) {
  */
 function getLocation() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_LOCATIONS);
+  ensureLocationIds_(sheet);
   const values = sheet.getDataRange().getValues();
   
   if (values.length === 0) {
     return { ok: true, locations: [] };
   }
   
-  const headers = values.shift();
+  // 照欄位位置讀（跟 punch() 一樣），表頭文字被改過也不會讀錯
+  values.shift();
   const locations = values
     .filter(row => row[1])
     .map(row => ({
-      id: row[headers.indexOf('ID')] || '',
-      name: row[headers.indexOf('地點名稱')] || '',
-      lat: row[headers.indexOf('GPS(緯度)')] || 0,
-      lng: row[headers.indexOf('GPS(經度)')] || 0,
-      scope: row[headers.indexOf('容許誤差(公尺)')] || 100
+      id: String(row[0] || ''),
+      name: String(row[1] || ''),
+      lat: Number(row[2]) || 0,
+      lng: Number(row[3]) || 0,
+      scope: Number(row[4]) || 100
     }));
   
   return { ok: true, locations: locations };

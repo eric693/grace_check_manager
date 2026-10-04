@@ -476,8 +476,17 @@ function handleGetAttendanceDetails(params) {
 // ==================== 地點管理相關 ====================
 
 function handleAddLocation(params) {
-  const { name, lat, lng } = params;
-  return addLocation(name, lat, lng);
+  const { name, lat, lng, radius } = params;
+  return addLocation(name, lat, lng, radius);
+}
+
+function handleUpdateLocation(params) {
+  const { id, name, lat, lng, radius } = params;
+  return updateLocation(id, name, lat, lng, radius);
+}
+
+function handleDeleteLocation(params) {
+  return deleteLocation(params.id);
 }
 
 function handleGetLocation() {

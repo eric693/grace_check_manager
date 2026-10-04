@@ -1776,48 +1776,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             getLocationBtn.disabled = false;
         });
     });
-    // 處理新增打卡地點
-    document.getElementById('add-location-btn')?.addEventListener('click', async () => {
-        const name = document.getElementById('location-name').value;
-        const lat = document.getElementById('location-lat').value;
-        const lng = document.getElementById('location-lng').value;
-        const radius = document.getElementById('location-radius').value; // 新增
-        
-        if (!name || !lat || !lng) {
-            showNotification(t('NOTIF_FILL_ALL_AND_LOCATION'), "error");
-            return;
-        }
-        
-        try {
-            // 加入 radius 參數
-            const res = await callApifetch(`addLocation&name=${encodeURIComponent(name)}&lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&radius=${radius}`);
-            if (res.ok) {
-                showNotification(t('NOTIF_LOCATION_ADDED'), "success");
-                
-                // 清空輸入欄位
-                document.getElementById('location-name').value = '';
-                document.getElementById('location-lat').value = '';
-                document.getElementById('location-lng').value = '';
-                document.getElementById('location-search').value = ''; // 新增
-                document.getElementById('location-radius').value = 200; // 新增
-                document.getElementById('radius-value').textContent = '200'; // 新增
-                
-                // 重設按鈕狀態
-                getLocationBtn.textContent = '取得當前位置';
-                getLocationBtn.disabled = false;
-                addLocationBtn.disabled = true;
-                
-                // 新增：清除地圖上的圓形
-                if (circle) {
-                    mapInstance.removeLayer(circle);
-                    circle = null;
-                }
-            } else {
-                showNotification(t('NOTIF_ADD_LOCATION_FAILED_MSG') + res.msg, "error");
-            }
-        } catch (err) {
-            console.error(err);
-        }
+    // 新增打卡地點；編輯中則是儲存修改（見 location-picker.js）
+    document.getElementById('add-location-btn')?.addEventListener('click', () => {
+        if (typeof submitLocationForm === 'function') submitLocationForm();
+    });
+    document.getElementById('cancel-location-edit-btn')?.addEventListener('click', () => {
+        if (typeof resetLocationForm === 'function') resetLocationForm();
+        if (typeof loadLocationAdminList === 'function') loadLocationAdminList();
+    });
+    document.getElementById('refresh-locations-btn')?.addEventListener('click', () => {
+        if (typeof loadLocationAdminList === 'function') loadLocationAdminList();
     });
     // UI切換邏輯
     const TAB_RELOAD_INTERVAL_MS = 30000; // 同一分頁 30 秒內不重複載入
@@ -1887,6 +1855,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (typeof initKioskAdmin === 'function') initKioskAdmin();
             if (typeof initAdminAuditLog === 'function') initAdminAuditLog();
             refreshLocationPicker();
+            if (typeof loadLocationAdminList === 'function') loadLocationAdminList();
         } else if (tabId === 'overtime-view') {
             initOvertimeTab();
         } else if (tabId === 'leave-view') {
