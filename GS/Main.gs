@@ -17,6 +17,13 @@ const ROUTE_ACCESS = {
   adminDeletePunch: 'admin',
   adminGetLeaveBalances: 'admin',
   adminSetLeaveBalance: 'admin',
+  adminListLeaves: 'admin',
+  adminCancelLeave: 'admin',
+  adminListOvertime: 'admin',
+  adminUpdateOvertime: 'admin',
+  adminCancelOvertime: 'admin',
+  adminListSheets: 'admin',
+  adminBrowseSheet: 'admin',
   updateEmployeeName: 'admin',
   getEmployeeSalaryTW: 'admin',
   setEmployeeSalaryTW: 'admin',
@@ -74,7 +81,7 @@ const DEPLOY_CHECKS = [
   ['PayrollRules.gs', () => typeof applyPayrollRules_ === 'function' && typeof payrollAttendanceZh_ === 'function'],
   ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function'],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
-  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminSetLeaveBalance === 'function'],
+  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminBrowseSheet === 'function'],
   ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
   ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function'],
@@ -317,6 +324,20 @@ function doGet(e) {
         return respond1(handleAdminGetLeaveBalances(e.parameter));
       case "adminSetLeaveBalance":
         return respond1(handleAdminSetLeaveBalance(e.parameter));
+      case "adminListLeaves":
+        return respond1(handleAdminListLeaves(e.parameter));
+      case "adminCancelLeave":
+        return respond1(handleAdminCancelLeave(e.parameter));
+      case "adminListOvertime":
+        return respond1(handleAdminListOvertime(e.parameter));
+      case "adminUpdateOvertime":
+        return respond1(handleAdminUpdateOvertime(e.parameter));
+      case "adminCancelOvertime":
+        return respond1(handleAdminCancelOvertime(e.parameter));
+      case "adminListSheets":
+        return respond1(handleAdminListSheets(e.parameter));
+      case "adminBrowseSheet":
+        return respond1(handleAdminBrowseSheet(e.parameter));
       case "getWeeklyPattern":
         return respond1(handleGetWeeklyPattern(e.parameter));
       case "saveWeeklyPattern":

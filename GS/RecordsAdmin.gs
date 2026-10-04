@@ -395,3 +395,401 @@ function handleAdminSetLeaveBalance(params) {
     return { ok: false, msg: error.toString() };
   }
 }
+
+// ==================== 請假紀錄 ====================
+//
+// 請假紀錄表（getLeaveRecordsSheet）：A 申請時間、B 員工ID、C 姓名、D 部門、E 假別（代碼）、
+// F 開始時間、G 結束時間、H 工作時數、I 天數、J 原因、K 狀態、L 審核人、M 審核時間、N 審核意見
+//
+// 只開放「取消」：已核准的取消時把時數退回假期餘額（核准時是從那裡扣的），
+// 不開放直接改時數或假別，免得紀錄和餘額對不起來。要改就取消後請員工重新申請。
+
+const LEAVE_STATUS_CANCELLED = 'CANCELLED';
+
+function leaveFingerprint_(row) {
+  const applied = isDateValue_(row[0]) ? row[0].getTime() : String(row[0]);
+  return [applied, String(row[1]).trim(), String(row[4]).trim(), String(row[10]).trim()].join('|');
+}
+
+/** API：查請假紀錄。參數：startDate、endDate（請假期間有重疊就列出）、employeeId、status（可省略） */
+function handleAdminListLeaves(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const start = parsePunchDateTime_(params.startDate, '00:00');
+    const end = parsePunchDateTime_(params.endDate, '23:59');
+    if (!start || !end || start > end) return { ok: false, code: 'RECORDS_DATE', msg: '請選擇正確的日期範圍' };
+
+    const tz = Session.getScriptTimeZone();
+    const nameMap = getEmployeeNameMap_();
+    const employeeId = String(params.employeeId || '').trim();
+    const status = String(params.status || '').trim().toUpperCase();
+    const data = getLeaveRecordsSheet().getDataRange().getValues();
+    const fmt = v => isDateValue_(v) ? Utilities.formatDate(v, tz, 'yyyy-MM-dd HH:mm') : String(v || '');
+    const records = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const uid = String(row[1] || '').trim();
+      if (!uid) continue;
+      if (employeeId && uid !== employeeId) continue;
+      const rowStatus = String(row[10] || '').trim().toUpperCase();
+      if (status && rowStatus !== status) continue;
+      const from = isDateValue_(row[5]) ? row[5] : new Date(row[5]);
+      const to = isDateValue_(row[6]) ? row[6] : new Date(row[6]);
+      if (isNaN(from.getTime()) || isNaN(to.getTime())) continue;
+      if (to < start || from.getTime() > end.getTime() + 59999) continue;
+
+      records.push({
+        row: i + 1,
+        key: leaveFingerprint_(row),
+        userId: uid,
+        name: nameMap[uid] || String(row[2] || ''),
+        leaveType: String(row[4] || ''),
+        start: fmt(from),
+        end: fmt(to),
+        hours: Number(row[7]) || 0,
+        days: Number(row[8]) || 0,
+        reason: String(row[9] || ''),
+        status: rowStatus,
+        reviewer: String(row[11] || ''),
+        comment: String(row[13] || '')
+      });
+    }
+    records.sort((a, b) => b.start.localeCompare(a.start));
+    return { ok: true, records: records };
+  } catch (error) {
+    Logger.log(' handleAdminListLeaves 錯誤: ' + error.message);
+    return { ok: false, msg: error.toString() };
+  }
+}
+
+/**
+ * API：取消一筆請假。已核准的把時數退回假期餘額。
+ * 參數：row、key、comment（取消原因，可省略）
+ */
+function handleAdminCancelLeave(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const sheet = getLeaveRecordsSheet();
+      const rowNumber = Number(params.row);
+      if (!Number.isInteger(rowNumber) || rowNumber < 2 || rowNumber > sheet.getLastRow()) {
+        return { ok: false, code: 'RECORDS_STALE', msg: '這筆資料已經變動，請重新查詢' };
+      }
+      const record = sheet.getRange(rowNumber, 1, 1, 14).getValues()[0];
+      if (leaveFingerprint_(record) !== String(params.key || '')) {
+        return { ok: false, code: 'RECORDS_STALE', msg: '這筆資料已經變動，請重新查詢' };
+      }
+      const status = String(record[10] || '').trim().toUpperCase();
+      if (status === LEAVE_STATUS_CANCELLED || status === 'REJECTED') {
+        return { ok: false, code: 'RECORDS_LEAVE_NOT_ACTIVE', msg: '這筆請假已經取消或駁回了' };
+      }
+
+      const userId = String(record[1]).trim();
+      const leaveType = String(record[4]).trim();
+      const hours = Number(record[7]) || 0;
+      let refunded = 0;
+
+      if (status === 'APPROVED' && hours > 0) {
+        const col = LEAVE_BALANCE_TYPES.indexOf(leaveType);
+        if (col === -1) return { ok: false, code: 'RECORDS_INVALID', msg: '不認得的假別：' + leaveType };
+        const balSheet = getLeaveBalanceSheet();
+        const balValues = balSheet.getDataRange().getValues();
+        let balRow = -1;
+        for (let i = 1; i < balValues.length; i++) {
+          if (String(balValues[i][0]).trim() === userId) { balRow = i + 1; break; }
+        }
+        if (balRow < 0) return { ok: false, code: 'RECORDS_NO_BALANCE', msg: '找不到這位員工的假期餘額，請先到「假期餘額」設定' };
+        const cell = balSheet.getRange(balRow, LEAVE_BALANCE_FIRST_COL + col);
+        cell.setValue(Math.round(((Number(cell.getValue()) || 0) + hours) * 100) / 100);
+        balSheet.getRange(balRow, LEAVE_BALANCE_UPDATED_COL).setValue(new Date());
+        refunded = hours;
+      }
+
+      const note = '管理員取消（' + admin.user.name + '）' + (params.comment ? '：' + String(params.comment).slice(0, 200) : '');
+      sheet.getRange(rowNumber, 11, 1, 4).setValues([[LEAVE_STATUS_CANCELLED, admin.user.name, new Date(), note]]);
+
+      params.employeeId = userId;
+      params.employeeName = String(record[2] || '');
+      params.cancelled = `${leaveType} ${hours} 小時（原狀態 ${status}${refunded ? '，已退回餘額' : ''}）`;
+      return { ok: true, refunded: refunded };
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (error) {
+    Logger.log(' handleAdminCancelLeave 錯誤: ' + error.message);
+    return { ok: false, msg: error.toString() };
+  }
+}
+
+// ==================== 加班紀錄 ====================
+//
+// 加班申請表（SHEET_OVERTIME）：A 申請ID、B 員工ID、C 姓名、D 加班日期、E 開始、F 結束、G 時數、
+// H 原因、I 申請時間、J 審核狀態（pending/approved/rejected）、K 審核人ID、L 審核人、M 審核時間、
+// N 審核意見、O 補休時數
+//
+// 可以改時間與時數、可以取消。已核准的改過或取消後，跟核准時一樣重算並儲存那個月的薪資。
+
+const OVERTIME_STATUS_CANCELLED = 'cancelled';
+
+function overtimeFingerprint_(row) {
+  return [String(row[0]).trim(), String(row[1]).trim(), String(row[9]).trim().toLowerCase()].join('|');
+}
+
+function overtimeTimeText_(value, tz) {
+  if (isDateValue_(value)) return Utilities.formatDate(value, tz, 'HH:mm');
+  const m = String(value || '').match(/(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2, '0')}:${m[2]}` : '';
+}
+
+/** 已核准的加班改過或取消後，重算那個月的薪資（跟 reviewOvertimeRequest 一樣） */
+function recalcSalaryAfterOvertimeChange_(employeeId, overtimeDate) {
+  try {
+    const tz = Session.getScriptTimeZone();
+    const yearMonth = isDateValue_(overtimeDate) ? Utilities.formatDate(overtimeDate, tz, 'yyyy-MM') : String(overtimeDate).substring(0, 7);
+    const recalc = calculateMonthlySalary(employeeId, yearMonth);
+    if (recalc && recalc.success) {
+      const saved = saveMonthlySalary(recalc.data);
+      return !!(saved && saved.success);
+    }
+  } catch (error) {
+    Logger.log(' 加班修改後重算薪資失敗: ' + error.message);
+  }
+  return false;
+}
+
+/** API：查加班紀錄。參數：startDate、endDate（加班日期）、employeeId、status（可省略） */
+function handleAdminListOvertime(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(params.startDate || '') || !/^\d{4}-\d{2}-\d{2}$/.test(params.endDate || '') || params.startDate > params.endDate) {
+      return { ok: false, code: 'RECORDS_DATE', msg: '請選擇正確的日期範圍' };
+    }
+    const tz = Session.getScriptTimeZone();
+    const sheet = initOvertimeSheet();
+    const data = sheet.getDataRange().getValues();
+    const nameMap = getEmployeeNameMap_();
+    const employeeId = String(params.employeeId || '').trim();
+    const status = String(params.status || '').trim().toLowerCase();
+    const records = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      const uid = String(row[1] || '').trim();
+      if (!uid) continue;
+      if (employeeId && uid !== employeeId) continue;
+      const rowStatus = String(row[9] || '').trim().toLowerCase();
+      if (status && rowStatus !== status) continue;
+      const date = isDateValue_(row[3]) ? Utilities.formatDate(row[3], tz, 'yyyy-MM-dd') : String(row[3] || '').substring(0, 10);
+      if (date < params.startDate || date > params.endDate) continue;
+      records.push({
+        row: i + 1,
+        key: overtimeFingerprint_(row),
+        userId: uid,
+        name: nameMap[uid] || String(row[2] || ''),
+        date: date,
+        startTime: overtimeTimeText_(row[4], tz),
+        endTime: overtimeTimeText_(row[5], tz),
+        hours: Number(row[6]) || 0,
+        reason: String(row[7] || ''),
+        status: rowStatus,
+        reviewer: String(row[11] || ''),
+        comment: String(row[13] || ''),
+        compHours: Number(row[14]) || 0
+      });
+    }
+    records.sort((a, b) => b.date.localeCompare(a.date) || a.startTime.localeCompare(b.startTime));
+    return { ok: true, records: records };
+  } catch (error) {
+    Logger.log(' handleAdminListOvertime 錯誤: ' + error.message);
+    return { ok: false, msg: error.toString() };
+  }
+}
+
+function lockedOvertimeRow_(sheet, params) {
+  const rowNumber = Number(params.row);
+  if (!Number.isInteger(rowNumber) || rowNumber < 2 || rowNumber > sheet.getLastRow()) {
+    return { ok: false, code: 'RECORDS_STALE', msg: '這筆資料已經變動，請重新查詢' };
+  }
+  const record = sheet.getRange(rowNumber, 1, 1, 15).getValues()[0];
+  if (overtimeFingerprint_(record) !== String(params.key || '')) {
+    return { ok: false, code: 'RECORDS_STALE', msg: '這筆資料已經變動，請重新查詢' };
+  }
+  return { ok: true, row: rowNumber, record: record };
+}
+
+/**
+ * API：修改加班的開始、結束時間與時數
+ * 參數：row、key、startTime、endTime（HH:mm）、hours（0～24）
+ */
+function handleAdminUpdateOvertime(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const startOk = /^\d{2}:\d{2}$/.test(params.startTime || '');
+    const endOk = /^\d{2}:\d{2}$/.test(params.endTime || '');
+    const hours = Number(params.hours);
+    if (!startOk || !endOk) return { ok: false, code: 'RECORDS_DATE', msg: '時間格式要是 HH:mm' };
+    if (!isFinite(hours) || hours <= 0 || hours > 24) return { ok: false, code: 'RECORDS_HOURS', msg: '加班時數要大於 0、最多 24' };
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    let found;
+    try {
+      const sheet = initOvertimeSheet();
+      found = lockedOvertimeRow_(sheet, params);
+      if (!found.ok) return found;
+      const status = String(found.record[9]).trim().toLowerCase();
+      if (status === 'rejected' || status === OVERTIME_STATUS_CANCELLED) {
+        return { ok: false, code: 'RECORDS_OT_NOT_ACTIVE', msg: '已駁回或取消的加班不能修改' };
+      }
+      const tz = Session.getScriptTimeZone();
+      params.before = `${overtimeTimeText_(found.record[4], tz)}~${overtimeTimeText_(found.record[5], tz)} ${found.record[6]} 小時`;
+      // 跟員工送出時一樣，開始、結束存成「加班日期 + 時間」
+      const dateStr = isDateValue_(found.record[3]) ? Utilities.formatDate(found.record[3], tz, 'yyyy-MM-dd') : String(found.record[3]).substring(0, 10);
+      const startAt = parsePunchDateTime_(dateStr, params.startTime);
+      const endAt = parsePunchDateTime_(dateStr, params.endTime);
+      if (!startAt || !endAt) return { ok: false, code: 'RECORDS_DATE', msg: '時間格式要是 HH:mm' };
+      sheet.getRange(found.row, 5, 1, 3).setValues([[startAt, endAt, Math.round(hours * 100) / 100]]);
+      const oldComment = String(found.record[13] || '');
+      sheet.getRange(found.row, 14).setValue((oldComment ? oldComment + '；' : '') + `管理員修改（${admin.user.name}）`);
+    } finally {
+      lock.releaseLock();
+    }
+
+    const status = String(found.record[9]).trim().toLowerCase();
+    const salaryUpdated = status === 'approved' ? recalcSalaryAfterOvertimeChange_(String(found.record[1]).trim(), found.record[3]) : false;
+    params.employeeId = String(found.record[1]).trim();
+    params.employeeName = String(found.record[2] || '');
+    return { ok: true, salaryUpdated: salaryUpdated };
+  } catch (error) {
+    Logger.log(' handleAdminUpdateOvertime 錯誤: ' + error.message);
+    return { ok: false, msg: error.toString() };
+  }
+}
+
+/** API：取消一筆加班。參數：row、key、comment */
+function handleAdminCancelOvertime(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    let found;
+    try {
+      const sheet = initOvertimeSheet();
+      found = lockedOvertimeRow_(sheet, params);
+      if (!found.ok) return found;
+      const status = String(found.record[9]).trim().toLowerCase();
+      if (status === 'rejected' || status === OVERTIME_STATUS_CANCELLED) {
+        return { ok: false, code: 'RECORDS_OT_NOT_ACTIVE', msg: '這筆加班已經取消或駁回了' };
+      }
+      const note = '管理員取消（' + admin.user.name + '）' + (params.comment ? '：' + String(params.comment).slice(0, 200) : '');
+      sheet.getRange(found.row, 10, 1, 5).setValues([[OVERTIME_STATUS_CANCELLED, admin.user.userId, admin.user.name, new Date(), note]]);
+    } finally {
+      lock.releaseLock();
+    }
+
+    const status = String(found.record[9]).trim().toLowerCase();
+    const salaryUpdated = status === 'approved' ? recalcSalaryAfterOvertimeChange_(String(found.record[1]).trim(), found.record[3]) : false;
+    params.employeeId = String(found.record[1]).trim();
+    params.employeeName = String(found.record[2] || '');
+    params.cancelled = `${found.record[6]} 小時（原狀態 ${status}）`;
+    return { ok: true, salaryUpdated: salaryUpdated };
+  } catch (error) {
+    Logger.log(' handleAdminCancelOvertime 錯誤: ' + error.message);
+    return { ok: false, msg: error.toString() };
+  }
+}
+
+// ==================== 資料表瀏覽（唯讀） ====================
+//
+// 其他重要的表只開放查看、搜尋、下載：它們各有修改的地方（薪資頁、審核區、員工管理），
+// 直接改原始資料容易和系統的計算對不起來。身分證、帳號這類欄位一律遮住。
+
+const BROWSE_SHEETS = [
+  { key: 'employees', name: '員工名單' },
+  { key: 'employeeInfo', name: '員工基本資料' },
+  { key: 'shifts', name: '排班表' },
+  { key: 'adjustPunch', name: '補打卡申請' },
+  { key: 'expense', name: '費用申請' },
+  { key: 'worklog', name: '工作日誌' },
+  { key: 'bonus', name: '獎金發放記錄' },
+  { key: 'salaryConfig', name: '員工薪資設定' },
+  { key: 'monthlySalary', name: '月薪資記錄' },
+  { key: 'adminAudit', name: '管理操作記錄' },
+  { key: 'salaryAudit', name: '薪資異動記錄' }
+];
+const BROWSE_MASK_HEADER = /身分證|身份證|證號|帳號|帳戶|銀行|密碼|token|session|idNumber|account|password|secret/i;
+const BROWSE_MAX_ROWS = 500;
+
+/** API：可以瀏覽的資料表清單（有建立的才列） */
+function handleAdminListSheets(params) {
+  const admin = requireRecordsAdmin_(params.token);
+  if (!admin.ok) return admin;
+  const ss = SpreadsheetApp.getActive();
+  return {
+    ok: true,
+    sheets: BROWSE_SHEETS.filter(s => ss.getSheetByName(s.name)).map(s => ({
+      key: s.key, name: s.name, rows: Math.max(0, ss.getSheetByName(s.name).getLastRow() - 1)
+    }))
+  };
+}
+
+/**
+ * API：讀一張資料表（最新的在前，最多 500 列）
+ * 參數：sheet（BROWSE_SHEETS 的 key）、keyword（比對整列文字，可省略）
+ */
+function handleAdminBrowseSheet(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const def = BROWSE_SHEETS.find(s => s.key === params.sheet);
+    if (!def) return { ok: false, code: 'RECORDS_INVALID', msg: '不能瀏覽這張表' };
+    const sheet = SpreadsheetApp.getActive().getSheetByName(def.name);
+    if (!sheet) return { ok: true, name: def.name, headers: [], rows: [], total: 0 };
+
+    const tz = Session.getScriptTimeZone();
+    const values = sheet.getDataRange().getValues();
+    if (!values.length) return { ok: true, name: def.name, headers: [], rows: [], total: 0 };
+    const headers = values[0].map(h => String(h || '').trim());
+    // 表頭空白的欄位不顯示（通常是沒用到的欄）
+    const cols = headers.map((h, i) => i).filter(i => headers[i]);
+    const masked = cols.map(i => BROWSE_MASK_HEADER.test(headers[i]));
+    const keyword = String(params.keyword || '').trim().toLowerCase();
+
+    const cellText = v => {
+      if (isDateValue_(v)) {
+        // 只有時間的儲存格（試算表存成 1899-12-30）只顯示時間
+        return v.getFullYear() < 1901 ? Utilities.formatDate(v, tz, 'HH:mm') : Utilities.formatDate(v, tz, 'yyyy-MM-dd HH:mm').replace(/ 00:00$/, '');
+      }
+      return v === null || v === undefined ? '' : String(v);
+    };
+
+    const rows = [];
+    let total = 0;
+    for (let i = values.length - 1; i >= 1; i--) {
+      const raw = values[i];
+      if (!raw.some(v => v !== '' && v !== null)) continue;
+      const out = cols.map((c, j) => {
+        const text = cellText(raw[c]);
+        if (!masked[j] || !text) return text;
+        return text.length <= 4 ? '****' : '****' + text.slice(-4);
+      });
+      if (keyword && !out.join(' ').toLowerCase().includes(keyword)) continue;
+      total++;
+      if (rows.length < BROWSE_MAX_ROWS) rows.push(out);
+    }
+    return { ok: true, name: def.name, headers: cols.map(i => headers[i]), rows: rows, total: total, limit: BROWSE_MAX_ROWS };
+  } catch (error) {
+    Logger.log(' handleAdminBrowseSheet 錯誤: ' + error.message);
+    return { ok: false, msg: error.toString() };
+  }
+}

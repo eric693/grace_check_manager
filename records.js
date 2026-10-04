@@ -76,8 +76,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // 預設查這個月 1 號到今天
     const today = todayStr();
-    document.getElementById('punch-start').value = today.slice(0, 8) + '01';
-    document.getElementById('punch-end').value = today;
+    ['punch', 'lv', 'ot'].forEach(prefix => {
+        document.getElementById(prefix + '-start').value = today.slice(0, 8) + '01';
+        document.getElementById(prefix + '-end').value = today;
+    });
+    // 請假常是預先申請的，結束日期預設到月底
+    const monthEnd = new Date(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0);
+    document.getElementById('lv-end').value = toLocalDateStr(monthEnd);
 
     document.getElementById('punch-search-btn').addEventListener('click', loadPunches);
     document.getElementById('punch-add-btn').addEventListener('click', () => openPunchForm(null));
@@ -85,6 +90,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('pf-cancel').addEventListener('click', closePunchForm);
     document.getElementById('lf-save').addEventListener('click', saveLeave);
     document.getElementById('lf-cancel').addEventListener('click', closeLeaveForm);
+    document.getElementById('lv-search').addEventListener('click', loadLeaves);
+    document.getElementById('ot-search').addEventListener('click', loadOvertime);
+    document.getElementById('otf-save').addEventListener('click', saveOvertime);
+    document.getElementById('otf-cancel').addEventListener('click', closeOvertimeForm);
+    ['otf-start', 'otf-end'].forEach(id => document.getElementById(id).addEventListener('change', fillOvertimeHours));
+    document.getElementById('br-search').addEventListener('click', browseSheet);
+    document.getElementById('br-sheet').addEventListener('change', browseSheet);
+    document.getElementById('br-keyword').addEventListener('keydown', e => { if (e.key === 'Enter') browseSheet(); });
+    document.getElementById('br-download').addEventListener('click', downloadBrowseCsv);
 
     await Promise.all([loadEmployeeOptions(), loadLocationOptions()]);
     loadPunches();
@@ -94,6 +108,9 @@ function switchRecordsTab(name) {
     document.querySelectorAll('.rec-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
     document.querySelectorAll('.rec-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'panel-' + name));
     if (name === 'leave') loadLeaveBalances();
+    if (name === 'leaves') loadLeaves();
+    if (name === 'overtime') loadOvertime();
+    if (name === 'browse') loadSheetList();
 }
 
 async function loadEmployeeOptions() {
@@ -105,9 +122,11 @@ async function loadEmployeeOptions() {
     }
     const filter = document.getElementById('punch-employee');
     const form = document.getElementById('pf-employee');
+    const extra = [...document.querySelectorAll('select.employee-filter')];
     employees.forEach(u => {
         filter.add(new Option(u.name, u.userId));
         form.add(new Option(u.name, u.userId));
+        extra.forEach(select => select.add(new Option(u.name, u.userId)));
     });
 }
 
@@ -393,4 +412,286 @@ async function saveLeave() {
             recMessage(t('RECORDS_SAVE_FAILED'), 'error');
         }
     });
+}
+
+// ==================== 請假紀錄 ====================
+
+const RECORD_STATUS = {
+    PENDING: { key: 'RECORDS_ST_PENDING', cls: 'rec-badge-warn' },
+    APPROVED: { key: 'RECORDS_ST_APPROVED', cls: 'rec-badge-in' },
+    REJECTED: { key: 'RECORDS_ST_REJECTED', cls: 'rec-badge-bad' },
+    CANCELLED: { key: 'RECORDS_ST_CANCELLED', cls: 'rec-badge-muted' }
+};
+function statusBadge(status) {
+    const s = RECORD_STATUS[String(status || '').toUpperCase()];
+    return s ? `<span class="rec-badge ${s.cls}">${escapeHtml(t(s.key))}</span>` : escapeHtml(status || '');
+}
+function canStillChange(status) {
+    const s = String(status || '').toUpperCase();
+    return s === 'PENDING' || s === 'APPROVED';
+}
+
+let leaveRecords = [];
+
+async function loadLeaves() {
+    const body = document.getElementById('lv-body');
+    body.innerHTML = `<tr><td colspan="8" class="rec-empty">${escapeHtml(t('LOADING'))}</td></tr>`;
+    const query = new URLSearchParams({
+        startDate: document.getElementById('lv-start').value,
+        endDate: document.getElementById('lv-end').value,
+        employeeId: document.getElementById('lv-employee').value,
+        status: document.getElementById('lv-status').value
+    }).toString();
+    try {
+        const data = await apiRequestJson(`adminListLeaves&${query}`);
+        if (!data.ok) { body.innerHTML = ''; recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
+        leaveRecords = data.records || [];
+        document.getElementById('lv-summary').textContent = t('RECORDS_PUNCH_COUNT', { count: leaveRecords.length });
+        if (!leaveRecords.length) {
+            body.innerHTML = `<tr><td colspan="8" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`;
+            return;
+        }
+        body.innerHTML = '';
+        leaveRecords.forEach((rec, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${escapeHtml(rec.name)}</td>
+                <td>${escapeHtml(t(rec.leaveType))}</td>
+                <td>${escapeHtml(rec.start)}</td>
+                <td>${escapeHtml(rec.end)}</td>
+                <td class="num">${escapeHtml(fmtHours(rec.hours))}</td>
+                <td>${statusBadge(rec.status)}</td>
+                <td>${escapeHtml(rec.reason)}${rec.comment ? `<div class="rec-days">${escapeHtml(rec.comment)}</div>` : ''}</td>
+                <td class="ops">${canStillChange(rec.status) ? `<button type="button" class="rec-btn rec-btn-danger rec-btn-sm" data-cancel="${index}">${escapeHtml(t('RECORDS_CANCEL_RECORD'))}</button>` : ''}</td>`;
+            body.appendChild(tr);
+        });
+        body.querySelectorAll('[data-cancel]').forEach(btn => {
+            btn.addEventListener('click', () => cancelLeave(leaveRecords[Number(btn.dataset.cancel)], btn));
+        });
+    } catch (error) {
+        console.error('載入請假紀錄失敗:', error);
+        body.innerHTML = '';
+        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+    }
+}
+
+async function cancelLeave(rec, button) {
+    const approved = String(rec.status).toUpperCase() === 'APPROVED';
+    const reason = prompt(t(approved ? 'RECORDS_LEAVE_CANCEL_APPROVED' : 'RECORDS_LEAVE_CANCEL_PENDING',
+        { name: rec.name, type: t(rec.leaveType), start: rec.start, hours: rec.hours }), '');
+    if (reason === null) return;
+    await withButton(button, async () => {
+        try {
+            const query = new URLSearchParams({ row: rec.row, key: rec.key, comment: reason }).toString();
+            const data = await apiRequestJson(`adminCancelLeave&${query}`);
+            if (data.ok) {
+                recMessage(data.refunded ? t('RECORDS_LEAVE_CANCELLED_REFUND', { hours: data.refunded }) : t('RECORDS_LEAVE_CANCELLED'), 'success');
+                loadLeaves();
+            } else {
+                recMessage(data.msg || t('RECORDS_SAVE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('取消請假失敗:', error);
+            recMessage(t('RECORDS_SAVE_FAILED'), 'error');
+        }
+    });
+}
+
+// ==================== 加班紀錄 ====================
+
+let overtimeRecords = [];
+let editingOvertime = null;
+
+async function loadOvertime() {
+    const body = document.getElementById('ot-body');
+    body.innerHTML = `<tr><td colspan="7" class="rec-empty">${escapeHtml(t('LOADING'))}</td></tr>`;
+    const query = new URLSearchParams({
+        startDate: document.getElementById('ot-start').value,
+        endDate: document.getElementById('ot-end').value,
+        employeeId: document.getElementById('ot-employee').value,
+        status: document.getElementById('ot-status').value
+    }).toString();
+    try {
+        const data = await apiRequestJson(`adminListOvertime&${query}`);
+        if (!data.ok) { body.innerHTML = ''; recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
+        overtimeRecords = data.records || [];
+        document.getElementById('ot-summary').textContent = t('RECORDS_PUNCH_COUNT', { count: overtimeRecords.length });
+        if (!overtimeRecords.length) {
+            body.innerHTML = `<tr><td colspan="7" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`;
+            return;
+        }
+        body.innerHTML = '';
+        overtimeRecords.forEach((rec, index) => {
+            const tr = document.createElement('tr');
+            const active = canStillChange(rec.status);
+            tr.innerHTML = `
+                <td>${escapeHtml(rec.date)}</td>
+                <td>${escapeHtml(rec.name)}</td>
+                <td class="num">${escapeHtml(rec.startTime)}～${escapeHtml(rec.endTime)}</td>
+                <td class="num">${escapeHtml(t('RECORDS_HOURS_SHORT', { hours: rec.hours }))}</td>
+                <td>${statusBadge(rec.status)}</td>
+                <td>${escapeHtml(rec.reason)}${rec.comment ? `<div class="rec-days">${escapeHtml(rec.comment)}</div>` : ''}</td>
+                <td class="ops">${active ? `
+                    <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-edit="${index}">${escapeHtml(t('BTN_EDIT'))}</button>
+                    <button type="button" class="rec-btn rec-btn-danger rec-btn-sm" data-cancel="${index}">${escapeHtml(t('RECORDS_CANCEL_RECORD'))}</button>` : ''}</td>`;
+            body.appendChild(tr);
+        });
+        body.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openOvertimeForm(overtimeRecords[Number(btn.dataset.edit)])));
+        body.querySelectorAll('[data-cancel]').forEach(btn => btn.addEventListener('click', () => cancelOvertime(overtimeRecords[Number(btn.dataset.cancel)], btn)));
+    } catch (error) {
+        console.error('載入加班紀錄失敗:', error);
+        body.innerHTML = '';
+        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+    }
+}
+
+function openOvertimeForm(rec) {
+    editingOvertime = rec;
+    document.getElementById('ot-form-title').textContent = t('RECORDS_OT_EDIT_TITLE', { name: rec.name, date: rec.date });
+    document.getElementById('otf-start').value = rec.startTime;
+    document.getElementById('otf-end').value = rec.endTime;
+    document.getElementById('otf-hours').value = rec.hours;
+    const form = document.getElementById('ot-form');
+    form.classList.remove('rec-hidden');
+    form.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+}
+
+function closeOvertimeForm() {
+    editingOvertime = null;
+    document.getElementById('ot-form').classList.add('rec-hidden');
+}
+
+/** 改了開始或結束時間，時數跟著算（四捨五入到 0.5 小時，還是可以手動改） */
+function fillOvertimeHours() {
+    const [sh, sm] = document.getElementById('otf-start').value.split(':').map(Number);
+    const [eh, em] = document.getElementById('otf-end').value.split(':').map(Number);
+    if ([sh, sm, eh, em].some(n => isNaN(n))) return;
+    let minutes = (eh * 60 + em) - (sh * 60 + sm);
+    if (minutes <= 0) minutes += 24 * 60;
+    document.getElementById('otf-hours').value = Math.round(minutes / 30) / 2;
+}
+
+async function saveOvertime() {
+    if (!editingOvertime) return;
+    const rec = editingOvertime;
+    const fields = {
+        row: rec.row, key: rec.key,
+        startTime: document.getElementById('otf-start').value,
+        endTime: document.getElementById('otf-end').value,
+        hours: document.getElementById('otf-hours').value
+    };
+    const hours = Number(fields.hours);
+    if (!fields.startTime || !fields.endTime || !(hours > 0 && hours <= 24)) {
+        recMessage(t('RECORDS_OT_INVALID'), 'error');
+        return;
+    }
+    await withButton(document.getElementById('otf-save'), async () => {
+        try {
+            const data = await apiRequestJson(`adminUpdateOvertime&${new URLSearchParams(fields).toString()}`);
+            if (data.ok) {
+                recMessage(t(data.salaryUpdated ? 'RECORDS_OT_UPDATED_SALARY' : 'RECORDS_OT_UPDATED'), 'success');
+                closeOvertimeForm();
+                loadOvertime();
+            } else {
+                recMessage(data.msg || t('RECORDS_SAVE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('修改加班失敗:', error);
+            recMessage(t('RECORDS_SAVE_FAILED'), 'error');
+        }
+    });
+}
+
+async function cancelOvertime(rec, button) {
+    const reason = prompt(t('RECORDS_OT_CANCEL_CONFIRM', { name: rec.name, date: rec.date, hours: rec.hours }), '');
+    if (reason === null) return;
+    await withButton(button, async () => {
+        try {
+            const query = new URLSearchParams({ row: rec.row, key: rec.key, comment: reason }).toString();
+            const data = await apiRequestJson(`adminCancelOvertime&${query}`);
+            if (data.ok) {
+                recMessage(t(data.salaryUpdated ? 'RECORDS_OT_CANCELLED_SALARY' : 'RECORDS_OT_CANCELLED'), 'success');
+                if (editingOvertime && editingOvertime.row === rec.row) closeOvertimeForm();
+                loadOvertime();
+            } else {
+                recMessage(data.msg || t('RECORDS_SAVE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('取消加班失敗:', error);
+            recMessage(t('RECORDS_SAVE_FAILED'), 'error');
+        }
+    });
+}
+
+// ==================== 其他資料表（唯讀） ====================
+
+let browseResult = null;
+let sheetListLoaded = false;
+
+async function loadSheetList() {
+    if (sheetListLoaded) return;
+    const select = document.getElementById('br-sheet');
+    try {
+        const data = await apiRequestJson('adminListSheets');
+        if (!data.ok) { recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
+        select.innerHTML = '';
+        (data.sheets || []).forEach(sh => select.add(new Option(t('RECORDS_SHEET_OPTION', { name: sh.name, rows: sh.rows }), sh.key)));
+        sheetListLoaded = true;
+        if (select.options.length) browseSheet();
+    } catch (error) {
+        console.error('載入資料表清單失敗:', error);
+        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+    }
+}
+
+async function browseSheet() {
+    const key = document.getElementById('br-sheet').value;
+    if (!key) return;
+    const head = document.getElementById('br-head');
+    const body = document.getElementById('br-body');
+    const summary = document.getElementById('br-summary');
+    head.innerHTML = '';
+    body.innerHTML = `<tr><td class="rec-empty">${escapeHtml(t('LOADING'))}</td></tr>`;
+    summary.textContent = '';
+    try {
+        const query = new URLSearchParams({ sheet: key, keyword: document.getElementById('br-keyword').value.trim() }).toString();
+        const data = await apiRequestJson(`adminBrowseSheet&${query}`);
+        if (!data.ok) { body.innerHTML = ''; recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
+        browseResult = data;
+        head.innerHTML = `<tr>${(data.headers || []).map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
+        summary.textContent = data.total > data.rows.length
+            ? t('RECORDS_BROWSE_LIMITED', { total: data.total, shown: data.rows.length })
+            : t('RECORDS_PUNCH_COUNT', { count: data.total });
+        if (!data.rows.length) {
+            body.innerHTML = `<tr><td colspan="${Math.max(1, data.headers.length)}" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`;
+            return;
+        }
+        body.innerHTML = data.rows.map(row => `<tr>${row.map(v => `<td>${escapeHtml(v)}</td>`).join('')}</tr>`).join('');
+    } catch (error) {
+        console.error('讀取資料表失敗:', error);
+        body.innerHTML = '';
+        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+    }
+}
+
+function downloadBrowseCsv() {
+    if (!browseResult || !browseResult.rows || !browseResult.rows.length) {
+        recMessage(t('RECORDS_NO_DATA'), 'error');
+        return;
+    }
+    // 開頭是 = + - @ 的儲存格加單引號，避免 Excel 當成公式執行
+    const cell = v => {
+        let text = String(v ?? '');
+        if (/^[=+\-@]/.test(text)) text = "'" + text;
+        return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const lines = [browseResult.headers, ...browseResult.rows].map(row => row.map(cell).join(','));
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${browseResult.name}_${todayStr()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }

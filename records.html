@@ -91,6 +91,9 @@
             <div class="rec-tabs">
                 <button type="button" class="rec-tab active" data-tab="punches" data-i18n="RECORDS_TAB_PUNCHES">打卡紀錄</button>
                 <button type="button" class="rec-tab" data-tab="leave" data-i18n="RECORDS_TAB_LEAVE">假期餘額</button>
+                <button type="button" class="rec-tab" data-tab="leaves" data-i18n="RECORDS_TAB_LEAVES">請假紀錄</button>
+                <button type="button" class="rec-tab" data-tab="overtime" data-i18n="RECORDS_TAB_OVERTIME">加班紀錄</button>
+                <button type="button" class="rec-tab" data-tab="browse" data-i18n="RECORDS_TAB_BROWSE">其他資料表</button>
             </div>
 
             <!-- 打卡紀錄 -->
@@ -214,6 +217,124 @@
                                 </tr>
                             </thead>
                             <tbody id="leave-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 請假紀錄 -->
+            <section id="panel-leaves" class="rec-panel">
+                <div class="rec-card">
+                    <h2 data-i18n="RECORDS_LEAVES_TITLE">請假紀錄</h2>
+                    <p class="rec-desc" data-i18n="RECORDS_LEAVES_DESC">列出請假期間落在這段日期的申請。取消已核准的請假，時數會退回假期餘額；要改時數或假別，請取消後讓員工重新申請。</p>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="lv-start" data-i18n="SHIFT_START_DATE">開始日期</label><input type="date" id="lv-start"></div>
+                        <div class="rec-field"><label for="lv-end" data-i18n="SHIFT_END_DATE">結束日期</label><input type="date" id="lv-end"></div>
+                        <div class="rec-field"><label for="lv-employee" data-i18n="SHIFT_EMPLOYEE_LABEL">員工</label><select id="lv-employee" class="employee-filter"><option value="" data-i18n="OPTION_ALL">全部</option></select></div>
+                        <div class="rec-field"><label for="lv-status" data-i18n="RECORDS_STATUS">狀態</label>
+                            <select id="lv-status">
+                                <option value="" data-i18n="OPTION_ALL">全部</option>
+                                <option value="PENDING" data-i18n="RECORDS_ST_PENDING">待審核</option>
+                                <option value="APPROVED" data-i18n="RECORDS_ST_APPROVED">已核准</option>
+                                <option value="REJECTED" data-i18n="RECORDS_ST_REJECTED">已駁回</option>
+                                <option value="CANCELLED" data-i18n="RECORDS_ST_CANCELLED">已取消</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="rec-actions"><button type="button" id="lv-search" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SEARCH">查詢</button></div>
+                </div>
+                <div class="rec-card">
+                    <div id="lv-summary" class="rec-summary"></div>
+                    <div class="rec-scroll">
+                        <table class="rec-table">
+                            <thead><tr>
+                                <th data-i18n="SHIFT_EMPLOYEE_LABEL">員工</th>
+                                <th data-i18n="RECORDS_LEAVE_TYPE">假別</th>
+                                <th data-i18n="RECORDS_FROM">開始</th>
+                                <th data-i18n="RECORDS_TO">結束</th>
+                                <th data-i18n="RECORDS_HOURS">時數</th>
+                                <th data-i18n="RECORDS_STATUS">狀態</th>
+                                <th data-i18n="RECORDS_REASON">原因</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id="lv-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 加班紀錄 -->
+            <section id="panel-overtime" class="rec-panel">
+                <div class="rec-card">
+                    <h2 data-i18n="RECORDS_OT_TITLE">加班紀錄</h2>
+                    <p class="rec-desc" data-i18n="RECORDS_OT_DESC">可以修改加班的時間與時數，或取消。已核准的加班改過或取消後，會自動重算那個月的薪資。</p>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="ot-start" data-i18n="SHIFT_START_DATE">開始日期</label><input type="date" id="ot-start"></div>
+                        <div class="rec-field"><label for="ot-end" data-i18n="SHIFT_END_DATE">結束日期</label><input type="date" id="ot-end"></div>
+                        <div class="rec-field"><label for="ot-employee" data-i18n="SHIFT_EMPLOYEE_LABEL">員工</label><select id="ot-employee" class="employee-filter"><option value="" data-i18n="OPTION_ALL">全部</option></select></div>
+                        <div class="rec-field"><label for="ot-status" data-i18n="RECORDS_STATUS">狀態</label>
+                            <select id="ot-status">
+                                <option value="" data-i18n="OPTION_ALL">全部</option>
+                                <option value="pending" data-i18n="RECORDS_ST_PENDING">待審核</option>
+                                <option value="approved" data-i18n="RECORDS_ST_APPROVED">已核准</option>
+                                <option value="rejected" data-i18n="RECORDS_ST_REJECTED">已駁回</option>
+                                <option value="cancelled" data-i18n="RECORDS_ST_CANCELLED">已取消</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="rec-actions"><button type="button" id="ot-search" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SEARCH">查詢</button></div>
+                </div>
+                <div id="ot-form" class="rec-card rec-form rec-hidden">
+                    <h2 id="ot-form-title"></h2>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="otf-start" data-i18n="RECORDS_FROM">開始</label><input type="time" id="otf-start"></div>
+                        <div class="rec-field"><label for="otf-end" data-i18n="RECORDS_TO">結束</label><input type="time" id="otf-end"></div>
+                        <div class="rec-field"><label for="otf-hours" data-i18n="RECORDS_HOURS">時數</label><input type="number" id="otf-hours" min="0.5" max="24" step="0.5"></div>
+                    </div>
+                    <div class="rec-actions">
+                        <button type="button" id="otf-save" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SAVE">儲存</button>
+                        <button type="button" id="otf-cancel" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_CANCEL">取消</button>
+                    </div>
+                </div>
+                <div class="rec-card">
+                    <div id="ot-summary" class="rec-summary"></div>
+                    <div class="rec-scroll">
+                        <table class="rec-table">
+                            <thead><tr>
+                                <th data-i18n="RECORDS_DATE">日期</th>
+                                <th data-i18n="SHIFT_EMPLOYEE_LABEL">員工</th>
+                                <th data-i18n="RECORDS_TIME">時間</th>
+                                <th data-i18n="RECORDS_HOURS">時數</th>
+                                <th data-i18n="RECORDS_STATUS">狀態</th>
+                                <th data-i18n="RECORDS_REASON">原因</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id="ot-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 其他資料表（唯讀） -->
+            <section id="panel-browse" class="rec-panel">
+                <div class="rec-card">
+                    <h2 data-i18n="RECORDS_BROWSE_TITLE">其他資料表</h2>
+                    <p class="rec-desc" data-i18n="RECORDS_BROWSE_DESC">查看和搜尋試算表裡的其他資料，最新的在最上面。這裡只能看和下載；修改請到各自的頁面（員工管理、薪資、審核）。身分證、帳號等欄位只顯示末 4 碼。</p>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="br-sheet" data-i18n="RECORDS_BROWSE_SHEET">資料表</label><select id="br-sheet"></select></div>
+                        <div class="rec-field"><label for="br-keyword" data-i18n="RECORDS_BROWSE_KEYWORD">搜尋</label><input type="search" id="br-keyword"></div>
+                    </div>
+                    <div class="rec-actions">
+                        <button type="button" id="br-search" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SEARCH">查詢</button>
+                        <button type="button" id="br-download" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_DOWNLOAD">下載 CSV</button>
+                    </div>
+                </div>
+                <div class="rec-card">
+                    <div id="br-summary" class="rec-summary"></div>
+                    <div class="rec-scroll">
+                        <table class="rec-table">
+                            <thead id="br-head"></thead>
+                            <tbody id="br-body"></tbody>
                         </table>
                     </div>
                 </div>
