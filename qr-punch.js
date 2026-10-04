@@ -48,13 +48,38 @@ async function handleLinePunchFromUrl() {
         btn.onclick = () => overlay.remove();
     };
 
-    try {
-        const position = await new Promise((resolve, reject) => {
-            navigator.geolocation.getCurrentPosition(resolve, reject, {
-                timeout: 15000,
-                enableHighAccuracy: true
-            });
-        });
+    // 失敗時（GPS 飄出範圍、網路斷掉）同一條連結可以直接再試，不用回 LINE 重新要（見 GS 的 handleLinePunchWithToken）
+    const showRetry = (icon, title, sub) => {
+        setResult(icon, title, sub, '#f44336');
+        const card = overlay.querySelector('div');
+        let retry = overlay.querySelector('#lpo-retry');
+        if (!retry) {
+            retry = document.createElement('button');
+            retry.id = 'lpo-retry';
+            retry.style.cssText = 'display:block;width:100%;margin:4px 0 8px;padding:12px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:17px;font-weight:bold;cursor:pointer;';
+            card.insertBefore(retry, overlay.querySelector('#lpo-close'));
+        }
+        retry.textContent = t('LPT_RETRY');
+        retry.style.display = 'block';
+        retry.onclick = () => { retry.style.display = 'none'; attempt(); };
+    };
+
+    const attempt = async () => {
+        overlay.querySelector('#lpo-icon').textContent = '📍';
+        overlay.querySelector('#lpo-title').textContent = t('LPT_LOCATING');
+        overlay.querySelector('#lpo-sub').textContent = t('LPT_ALLOW_GPS');
+        overlay.querySelector('#lpo-close').style.display = 'none';
+
+        let position;
+        try {
+            position = await getPunchPosition();
+        } catch (err) {
+            const geoErrors = { 1: t('LPT_GEO_DENIED'), 3: t('LPT_GEO_TIMEOUT') };
+            // 拒絕定位權限再試也沒用；其他（訊號差、逾時）可以再試
+            if (err && err.code === 1) setResult('❌', t('LPT_NO_LOCATION'), geoErrors[1], '#f44336');
+            else showRetry('❌', t('LPT_NO_LOCATION'), geoErrors[err && err.code] || t('LPT_GEO_CHECK'));
+            return;
+        }
 
         overlay.querySelector('#lpo-title').textContent = t('LPT_PUNCHING');
         overlay.querySelector('#lpo-sub').textContent = '';
@@ -62,15 +87,25 @@ async function handleLinePunchFromUrl() {
         const params = new URLSearchParams({
             token: token,
             lat: position.coords.latitude,
-            lng: position.coords.longitude
+            lng: position.coords.longitude,
+            accuracy: Math.round(position.coords.accuracy || 0)
         });
 
-        const res = await callApifetch(`linePunch&${params.toString()}`);
+        let res;
+        try {
+            res = await apiRequestJson(`linePunch&${params.toString()}`);
+        } catch (err) {
+            // 卡可能已經打上了、只是回應沒回來；再試一次後端會認得，不會打兩張
+            console.error('LINE 打卡連線失敗:', err);
+            showRetry('📶', t('LPT_NETWORK_TITLE'), t('LPT_NETWORK'));
+            return;
+        }
 
         if (res.ok) {
             const typeText = res.punchType === '上班' ? '🟢 ' + t('KIOSK_CHECK_IN') : '🟠 ' + t('KIOSK_CHECK_OUT');
             const detailText = `${res.location ? res.location + '｜' : ''}${res.time || ''}`;
-            setResult('✅', t('LPT_SUCCESS', { type: typeText }), detailText, '#4CAF50');
+            setResult('✅', t(res.already ? 'LPT_ALREADY' : 'LPT_SUCCESS', { type: typeText }), detailText, '#4CAF50');
+            overlay.querySelector('#lpo-retry')?.remove();
 
             // 3 秒倒數後自動關閉，並嘗試返回上一頁
             const card = overlay.querySelector('div');
@@ -95,26 +130,28 @@ async function handleLinePunchFromUrl() {
                 try { window.history.back(); } catch(e) {}
             };
 
-            await loadAbnormalRecordsInBackground();
-        } else {
-            const msgMap = {
-                ERR_LPT_INVALID:  t('LPT_ERR_INVALID'),
-                ERR_LPT_EXPIRED:  t('LPT_ERR_EXPIRED'),
-                // 後端的中文訊息會附上最近的打卡地點與距離，中文介面直接用
-                ERR_NOT_IN_RANGE: punchServerMessage(res, 'LPT_ERR_NOT_IN_RANGE'),
-                ERR_DUPLICATE_PUNCH: t('LPT_ERR_DUPLICATE'),
-                // 一天多組上下班的順序規則（GS/PunchRules.gs）
-                ERR_PUNCH_SAME_TYPE: t('ERR_PUNCH_SAME_TYPE', res.params || {}),
-                ERR_PUNCH_LIMIT: t('ERR_PUNCH_LIMIT', res.params || {})
-            };
-            const failText = msgMap[res.code] || punchServerMessage(res, 'LPT_TRY_LATER');
-            // 系統錯誤時附上原因，截圖給管理員就知道是哪裡壞了
-            setResult('❌', t('LPT_FAILED'), res.detail ? `${failText}（${res.detail}）` : failText, '#f44336');
+            if (typeof loadAbnormalRecordsInBackground === 'function') await loadAbnormalRecordsInBackground();
+            return;
         }
-    } catch (err) {
-        const geoErrors = { 1: t('LPT_GEO_DENIED'), 3: t('LPT_GEO_TIMEOUT') };
-        setResult('❌', t('LPT_NO_LOCATION'), geoErrors[err.code] || t('LPT_GEO_CHECK'), '#f44336');
-    }
+
+        const msgMap = {
+            ERR_LPT_INVALID:  t('LPT_ERR_INVALID'),
+            ERR_LPT_EXPIRED:  t('LPT_ERR_EXPIRED'),
+            // 後端的中文訊息會附上最近的打卡地點與距離，中文介面直接用
+            ERR_NOT_IN_RANGE: punchServerMessage(res, 'LPT_ERR_NOT_IN_RANGE'),
+            ERR_DUPLICATE_PUNCH: t('LPT_ERR_DUPLICATE'),
+            // 一天多組上下班的順序規則（GS/PunchRules.gs）
+            ERR_PUNCH_SAME_TYPE: t('ERR_PUNCH_SAME_TYPE', res.params || {}),
+            ERR_PUNCH_LIMIT: t('ERR_PUNCH_LIMIT', res.params || {})
+        };
+        const failText = msgMap[res.code] || punchServerMessage(res, 'LPT_TRY_LATER');
+        // 系統錯誤時附上原因，截圖給管理員就知道是哪裡壞了
+        const sub = res.detail ? `${failText}（${res.detail}）` : failText;
+        if (res.retry) showRetry('❌', t('LPT_FAILED'), sub);
+        else setResult('❌', t('LPT_FAILED'), sub, '#f44336');
+    };
+
+    await attempt();
 }
 
 /**

@@ -162,3 +162,33 @@ function computeDayWorkFromPunches_(punches, shift) {
     unpaired: paired.unpaired
   };
 }
+
+// ==================== 打卡網路不穩時的保護 ====================
+//
+// 室內 GPS 常飄 30～100 公尺；手機回報的 accuracy 是它自己估的誤差半徑。
+// 判斷範圍時把這個誤差算進去（最多加 PUNCH_GPS_TOLERANCE_MAX 公尺），
+// 員工站在店裡就不會因為 GPS 飄出去而一直失敗。
+const PUNCH_GPS_TOLERANCE_MAX = 100;
+
+// 網路慢時，卡其實打成功了、手機卻沒收到回應，員工會再按一次。
+// 同一種卡在這段時間內又來一次，就當作「剛才那張已經打好了」，回成功而不是錯誤。
+const PUNCH_RETRY_WINDOW_MS = 3 * 60 * 1000;
+
+/** 手機回報的 GPS 誤差 → 判斷範圍時可以多放寬幾公尺 */
+function punchGpsTolerance_(accuracy) {
+  const a = Number(accuracy);
+  if (!isFinite(a) || a <= 0) return 0;
+  return Math.min(a, PUNCH_GPS_TOLERANCE_MAX);
+}
+
+/**
+ * 今天最後一張有效打卡是不是同一種、而且就在剛剛（網路重送）
+ * @returns {{type: string, time: Date}|null}
+ */
+function recentSamePunch_(userId, type, rows) {
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const punches = getDayPunches_(userId, today, rows);
+  const last = punches[punches.length - 1];
+  if (last && last.type === type && Date.now() - last.time.getTime() < PUNCH_RETRY_WINDOW_MS) return last;
+  return null;
+}

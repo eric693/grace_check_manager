@@ -796,9 +796,32 @@ function generateLinePunchToken_(userId, punchType) {
     punchType: punchType,
     expiry: new Date().getTime() + 5 * 60 * 1000
   });
-  PropertiesService.getScriptProperties().setProperty('LPT_' + token, data);
+  const props = PropertiesService.getScriptProperties();
+  sweepLinePunchTokens_(props);
+  props.setProperty('LPT_' + token, data);
   Logger.log('LINE 打卡 Token 已生成: ' + token + ' (' + punchType + ')');
   return token;
+}
+
+/**
+ * 清掉過期的打卡連結。連結打卡成功後會留著結果（網路重送時回同一個成功），
+ * 過期 10 分鐘後就不需要了。
+ */
+function sweepLinePunchTokens_(props) {
+  try {
+    const all = props.getProperties();
+    const cutoff = new Date().getTime() - 10 * 60 * 1000;
+    Object.keys(all).forEach(k => {
+      if (k.indexOf('LPT_') !== 0) return;
+      try {
+        if (JSON.parse(all[k]).expiry < cutoff) props.deleteProperty(k);
+      } catch (e) {
+        props.deleteProperty(k);
+      }
+    });
+  } catch (error) {
+    Logger.log('清理打卡連結失敗（不影響打卡）: ' + error.message);
+  }
 }
 
 /**
@@ -6096,7 +6119,8 @@ function diagnoseWithCorrectUserId() {
 /**
  * 檢查打卡位置是否有效
  */
-function checkPunchLocation(lat, lng) {
+function checkPunchLocation(lat, lng, tolerance) {
+  const extra = Number(tolerance) || 0;   // GPS 誤差容許（公尺），見 PunchRules.gs
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_LOCATIONS);
     const lastRow = sheet.getLastRow();
@@ -6130,7 +6154,7 @@ function checkPunchLocation(lat, lng) {
       }
       
       // 檢查是否在範圍內
-      if (distance <= Number(radius)) {
+      if (distance <= Number(radius) + extra) {
         validLocation = {
           valid: true,
           locationName: name,

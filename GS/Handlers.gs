@@ -207,8 +207,8 @@ function handleExchangeToken(otoken) {
 // ==================== 打卡功能相關 ====================
 
 function handlePunch(params) {
-  const { token, type, lat, lng, note } = params;
-  return punch(token, type, parseFloat(lat), parseFloat(lng), note);
+  const { token, type, lat, lng, note, accuracy } = params;
+  return punch(token, type, parseFloat(lat), parseFloat(lng), note, accuracy);
 }
 
 // function handleAdjustPunch(params) {
@@ -231,49 +231,65 @@ function handleLinePunchWithToken(params) {
 
     const props = PropertiesService.getScriptProperties();
     const key = 'LPT_' + token;
-    const dataStr = props.getProperty(key);
 
-    if (!dataStr) {
-      return { ok: false, code: 'ERR_LPT_INVALID', msg: '打卡連結無效或已使用，請重新在 LINE 輸入打卡指令' };
-    }
+    // 連結在「打卡成功」之後才算用掉：GPS 飄出範圍、網路斷掉時，員工按「再試一次」就好，
+    // 不必回 LINE 重新要連結。成功之後再用同一條連結（網路慢重送），回傳同一個成功結果。
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    let userId, punchType, result, locationCheck;
+    try {
+      const dataStr = props.getProperty(key);
+      if (!dataStr) {
+        return { ok: false, code: 'ERR_LPT_INVALID', msg: '打卡連結無效或已使用，請重新在 LINE 輸入打卡指令' };
+      }
+      const data = JSON.parse(dataStr);
 
-    const data = JSON.parse(dataStr);
+      if (data.done) {
+        return { ok: true, already: true, punchType: data.punchType, time: data.done.time, location: data.done.location };
+      }
+      if (new Date().getTime() > data.expiry) {
+        props.deleteProperty(key);
+        return { ok: false, code: 'ERR_LPT_EXPIRED', msg: '打卡連結已過期（5 分鐘），請重新在 LINE 輸入打卡指令' };
+      }
 
-    if (new Date().getTime() > data.expiry) {
-      props.deleteProperty(key);
-      return { ok: false, code: 'ERR_LPT_EXPIRED', msg: '打卡連結已過期（5 分鐘），請重新在 LINE 輸入打卡指令' };
-    }
+      userId    = data.userId;
+      punchType = data.punchType;
+      const latF = parseFloat(lat);
+      const lngF = parseFloat(lng);
 
-    // 單次使用：立即刪除 token
-    props.deleteProperty(key);
+      // 地理圍欄驗證（把手機回報的 GPS 誤差算進去，見 PunchRules.gs）
+      locationCheck = checkPunchLocation(latF, lngF, punchGpsTolerance_(params.accuracy));
+      if (!locationCheck.valid) {
+        const nearest = locationCheck.nearestLocation;
+        const hint = nearest ? `（距離最近地點「${nearest.name}」還有 ${nearest.distance} 公尺）` : '';
+        return { ok: false, code: 'ERR_NOT_IN_RANGE', msg: locationCheck.reason + hint, retry: true };
+      }
 
-    const userId    = data.userId;
-    const punchType = data.punchType;
-    const latF      = parseFloat(lat);
-    const lngF      = parseFloat(lng);
+      const rows = SpreadsheetApp.getActive().getSheetByName(SHEET_ATTENDANCE).getDataRange().getValues();
+      // 剛剛已經打好同一種卡（例如上一條連結其實成功了、只是沒收到回應）：當作成功
+      const recent = recentSamePunch_(userId, punchType, rows);
+      if (recent) {
+        const time = Utilities.formatDate(recent.time, Session.getScriptTimeZone(), 'HH:mm:ss');
+        props.setProperty(key, JSON.stringify(Object.assign(data, { done: { time: time, location: locationCheck.locationName } })));
+        return { ok: true, already: true, punchType: punchType, time: time, location: locationCheck.locationName };
+      }
 
-    // 地理圍欄驗證
-    const locationCheck = checkPunchLocation(latF, lngF);
-    if (!locationCheck.valid) {
-      const nearest = locationCheck.nearestLocation;
-      const hint = nearest ? `（距離最近地點「${nearest.name}」還有 ${nearest.distance} 公尺）` : '';
-      return { ok: false, code: 'ERR_NOT_IN_RANGE', msg: locationCheck.reason + hint };
-    }
+      // 一天最多三組上下班（休息前要打卡），順序與次數見 PunchRules.gs
+      const sequence = checkPunchSequence_(userId, punchType, rows);
+      if (!sequence.ok) {
+        props.deleteProperty(key);
+        return sequence;
+      }
 
-    // 防重複打卡
-    if (isDuplicatePunch_(userId, punchType)) {
-      return { ok: false, code: 'ERR_DUPLICATE_PUNCH', msg: '您剛剛已經打過卡了，請勿重複操作' };
-    }
-
-    // 一天最多三組上下班（休息前要打卡），順序與次數見 PunchRules.gs
-    const sequence = checkPunchSequence_(userId, punchType);
-    if (!sequence.ok) return sequence;
-
-    // 執行打卡
-    const result = executePunch(userId, punchType, latF, lngF, locationCheck.locationName);
-
-    if (!result.success) {
-      return { ok: false, code: 'ERR_PUNCH_FAILED', msg: result.message };
+      // 執行打卡
+      result = executePunch(userId, punchType, latF, lngF, locationCheck.locationName);
+      if (!result.success) {
+        return { ok: false, code: 'ERR_PUNCH_FAILED', msg: result.message, retry: true };
+      }
+      // 記下結果：同一條連結再送一次（網路重送）會拿到同樣的成功，不會打兩張
+      props.setProperty(key, JSON.stringify(Object.assign(data, { done: { time: result.time, location: locationCheck.locationName } })));
+    } finally {
+      lock.releaseLock();
     }
 
     // 推播 LINE 成功通知給本人

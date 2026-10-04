@@ -2720,95 +2720,65 @@ async function doPunch(type) {
 
     generalButtonState(button, 'processing', loadingText);
     
-    // ==================== 上班打卡前檢查排班 ====================
+    // ==================== 上班打卡：順便提醒今天的排班 ====================
+    // 不等它：查排班要多一趟網路，以前要先查完才開始定位、打卡，網路慢時員工要多等好幾秒
     if (type === '上班') {
-        try {
-            const userId = localStorage.getItem('sessionUserId');
-            const today = todayStr();
-
-            const now = new Date();
-            const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-            
-            const shiftRes = await callApifetch(`getEmployeeShiftForDate&employeeId=${userId}&date=${today}`);
-            
-            if (shiftRes.ok && shiftRes.hasShift) {
-                const shift = shiftRes.data;
-                
-                showNotification(
-                    t('SHIFT_INFO_NOTIFICATION', {
-                        shiftType: shift.shiftType,
-                        startTime: shift.startTime,
-                        endTime: shift.endTime
-                    }) || `今日排班：${escapeHtml(shift.shiftType)} (${shift.startTime}-${shift.endTime})`,
-                    'info'
-                );
-                
-                // const now = new Date();
-                // const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                
-                if (shift.startTime) {
-                    const timeDiff = getTimeDifference(currentTime, shift.startTime);
-                    
-                    if (timeDiff < -30) {
-                        showNotification(
-                            t('EARLY_PUNCH_WARNING') || `注意：您的排班時間是 ${shift.startTime}，目前提前超過 30 分鐘打卡。`,
-                            'warning'
-                        );
-                    }
-                    else if (timeDiff > 30) {
-                        showNotification(
-                            t('LATE_PUNCH_WARNING') || `注意：您的排班時間是 ${shift.startTime}，目前已遲到超過 30 分鐘。`,
-                            'warning'
-                        );
-                    }
-                }
+        const userId = localStorage.getItem('sessionUserId');
+        const now = new Date();
+        const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        callApifetch(`getEmployeeShiftForDate&employeeId=${userId}&date=${todayStr()}`).then(shiftRes => {
+            if (!shiftRes.ok || !shiftRes.hasShift || !shiftRes.data || !shiftRes.data.startTime) return;
+            const timeDiff = getTimeDifference(currentTime, shiftRes.data.startTime);
+            if (timeDiff < -30) {
+                showNotification(t('EARLY_PUNCH_WARNING') || `注意：您的排班時間是 ${shiftRes.data.startTime}，目前提前超過 30 分鐘打卡。`, 'warning');
+            } else if (timeDiff > 30) {
+                showNotification(t('LATE_PUNCH_WARNING') || `注意：您的排班時間是 ${shiftRes.data.startTime}，目前已遲到超過 30 分鐘。`, 'warning');
             }
-        } catch (error) {
-            console.error('檢查排班失敗:', error);
-        }
+        }).catch(error => console.warn('檢查排班失敗:', error));
     }
-    
-    if (!navigator.geolocation) {
-        showNotification(t("ERROR_GEOLOCATION", { msg: "您的瀏覽器不支援地理位置功能。" }), "error");
+
+    let pos;
+    try {
+        pos = await getPunchPosition();
+    } catch (err) {
+        const msg = err && err.code === 1 ? t('LPT_GEO_DENIED') : err && err.code === 3 ? t('LPT_GEO_TIMEOUT') : t('LPT_GEO_CHECK');
+        showNotification(t("ERROR_GEOLOCATION", { msg: msg }), "error");
         generalButtonState(button, 'idle');
-        _isPunching = false;
+        _isPunching = false;  //  釋放鎖（定位失敗也要釋放）
         return;
     }
 
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const now = new Date();
-        const datetime = now.toISOString();
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const datetime = new Date().toISOString();
+    const accuracy = Math.round(pos.coords.accuracy || 0);
+    const action = `punch&type=${encodeURIComponent(type)}&lat=${lat}&lng=${lng}&accuracy=${accuracy}&datetime=${encodeURIComponent(datetime)}&note=${encodeURIComponent(navigator.userAgent)}`;
 
-        const action = `punch&type=${encodeURIComponent(type)}&lat=${lat}&lng=${lng}&datetime=${encodeURIComponent(datetime)}&note=${encodeURIComponent(navigator.userAgent)}`;
+    try {
+        const res = await apiRequestJson(action);
+        const msgKey = res.code || "UNKNOWN_ERROR";
+        let msg = t(msgKey, res.params || {});
+        // 錯誤碼沒有翻譯時，顯示後端的中文說明，不要讓員工看到 ERR_… 這種代碼
+        if (msg === msgKey && res.msg) msg = res.msg;
+        // 網路慢重送：剛才那張其實已經打好了
+        if (res.ok && res.already) msg = t('PUNCH_ALREADY_DONE', { type: t(type === '上班' ? 'PUNCH_IN' : 'PUNCH_OUT') });
+        showNotification(msg, res.ok ? "success" : "error");
 
-        try {
-            const res = await callApifetch(action);
-            const msgKey = res.code || "UNKNOWN_ERROR";
-            let msg = t(msgKey, res.params || {});
-            // 錯誤碼沒有翻譯時，顯示後端的中文說明，不要讓員工看到 ERR_… 這種代碼
-            if (msg === msgKey && res.msg) msg = res.msg;
-            showNotification(msg, res.ok ? "success" : "error");
-
-            if (res.ok) {
-                clearMonthDataCache(); // 打卡成功，出勤記錄的快取已經過期
-            }
-
-            if (res.ok && type === '上班') {
-                clearShiftCache();
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            generalButtonState(button, 'idle');
-            _isPunching = false;  //  釋放鎖
+        if (res.ok) {
+            clearMonthDataCache(); // 打卡成功，出勤記錄的快取已經過期
         }
-    }, (err) => {
-        showNotification(t("ERROR_GEOLOCATION", { msg: err.message }), "error");
+
+        if (res.ok && type === '上班') {
+            clearShiftCache();
+        }
+    } catch (err) {
+        // 連線逾時或斷線：卡可能已經打上了，再按一次後端會認得，不會打兩張
+        console.error(err);
+        showNotification(t('PUNCH_NETWORK_RETRY'), "error");
+    } finally {
         generalButtonState(button, 'idle');
-        _isPunching = false;  //  釋放鎖（定位失敗也要釋放）
-    });
+        _isPunching = false;  //  釋放鎖
+    }
 }
 
 /**

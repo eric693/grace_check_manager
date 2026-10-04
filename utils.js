@@ -123,3 +123,24 @@ function setElementSrc(id, src) {
     if (el) el.src = src;
     return el;
 }
+
+/**
+ * 打卡用的定位：先試高精度 8 秒，室內拿不到就改用一般定位（可以用 2 分鐘內的位置）。
+ * 以前只試高精度，室內常常要等滿 15 秒才失敗；網頁打卡甚至沒有時間上限，會一直轉圈。
+ * 使用者拒絕定位權限（code 1）就不再試，直接丟出去讓畫面提示。
+ */
+async function getPunchPosition() {
+    if (!navigator.geolocation) {
+        const error = new Error('Geolocation not supported');
+        error.code = 2;
+        throw error;
+    }
+    const get = options => new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, options));
+    try {
+        return await get({ enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 });
+    } catch (error) {
+        if (error && error.code === 1) throw error;
+        return await get({ enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 });
+    }
+}

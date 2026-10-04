@@ -353,7 +353,7 @@ function verifyOneTimeToken_(otoken) {
 /**
  * 打卡功能（加入防重複：同一天同類型只能打一次）
  */
-function punch(sessionToken, type, lat, lng, note) {
+function punch(sessionToken, type, lat, lng, note, accuracy) {
   const employee = checkSession_(sessionToken);
   const user = employee.user;
   if (!user) return { ok: false, code: "ERR_SESSION_INVALID" };
@@ -369,10 +369,12 @@ function punch(sessionToken, type, lat, lng, note) {
   let locationName = null;
   let minDistance = Infinity;
 
+  // 把手機回報的 GPS 誤差算進去（見 PunchRules.gs 的 punchGpsTolerance_）
+  const tolerance = punchGpsTolerance_(accuracy);
   for (let [, name, locLat, locLng, radius] of values) {
     if (!name || !locLat || !locLng) continue;
     const dist = getDistanceMeters_(lat, lng, Number(locLat), Number(locLng));
-    if (dist <= Number(radius) && dist < minDistance) {
+    if (dist <= Number(radius) + tolerance && dist < minDistance) {
       locationName = name;
       minDistance = dist;
     }
@@ -387,7 +389,13 @@ function punch(sessionToken, type, lat, lng, note) {
     return { ok: false, code: "ERR_INVALID_PUNCH_TYPE", msg: '打卡類型不正確' };
   }
   const sh = SpreadsheetApp.getActive().getSheetByName(SHEET_ATTENDANCE);
-  const sequence = checkPunchSequence_(user.userId, type, sh.getDataRange().getValues());
+  const rows = sh.getDataRange().getValues();
+  // 網路慢重送：剛剛已經打好同一種卡，直接回成功，不要讓員工以為失敗
+  const recent = recentSamePunch_(user.userId, type, rows);
+  if (recent) {
+    return { ok: true, code: "PUNCH_SUCCESS", params: { type: type }, already: true };
+  }
+  const sequence = checkPunchSequence_(user.userId, type, rows);
   if (!sequence.ok) {
     Logger.log('打卡順序不符: ' + user.name + ' ' + type + ' - ' + sequence.msg);
     return sequence;
