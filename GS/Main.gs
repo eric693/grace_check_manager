@@ -72,6 +72,7 @@ const DEPLOY_CHECKS = [
   ['ShiftTemplates.gs', () => typeof computeNetWorkMinutes_ === 'function' && typeof handleSaveShiftTemplates === 'function'],
   ['SystemSettings.gs', () => typeof validatePayrollRules_ === 'function'],
   ['Utils.gs', () => typeof getParam === 'function' && typeof getSheetValues_ === 'function'],
+  ['WeeklyPattern.gs', () => typeof generateShiftsFromPattern_ === 'function' && typeof handleSaveWeeklyPattern === 'function'],
   ['WorklogHandlers.gs', () => typeof handleSubmitWorklog === 'function'],
   ['WorklogOperations.gs', () => typeof getWorklogSheet === 'function']
 ];
@@ -291,6 +292,12 @@ function doGet(e) {
         return respond1(handleGetShiftTemplates(e.parameter));
       case "saveShiftTemplates":
         return respond1(handleSaveShiftTemplates(e.parameter));
+      case "getWeeklyPattern":
+        return respond1(handleGetWeeklyPattern(e.parameter));
+      case "saveWeeklyPattern":
+        return respond1(handleSaveWeeklyPattern(e.parameter));
+      case "generateShiftsFromPattern":
+        return respond1(handleGenerateShiftsFromPattern(e.parameter));
       case "savePayrollAdjustments":
         return respond1(handleSavePayrollAdjustments(e.parameter));
       

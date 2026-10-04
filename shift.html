@@ -836,6 +836,17 @@
         .shift-templates-table .tpl-code { max-width: 70px; text-transform: uppercase; }
         .shift-templates-table .tpl-calc { font-variant-numeric: tabular-nums; color: #374151; white-space: nowrap; }
         .shift-templates-table tr.inactive td { opacity: 0.5; }
+
+        /* 固定班表 */
+        .weekly-table { min-width: 760px; }
+        .weekly-table td:first-child { text-align: left; font-weight: 600; white-space: nowrap; }
+        .weekly-table select { width: 100%; min-width: 72px; padding: 6px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
+        .weekly-table select.has-shift { border-color: #4285f4; background: #eef4ff; font-weight: 600; }
+        .weekly-generate { margin-top: 28px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+        .weekly-generate h3 { font-size: 18px; margin-bottom: 8px; }
+        .weekly-replace { display: flex; align-items: flex-start; gap: 8px; margin: 4px 0 16px; color: #374151; line-height: 1.5; }
+        .weekly-replace input { margin-top: 4px; }
+        .weekly-result { margin-top: 12px; color: #374151; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -849,6 +860,7 @@
             <button class="shift-tab active" data-tab="view" data-i18n="SHIFT_TAB_VIEW">查看排班</button>
             <button class="shift-tab" data-tab="add" data-i18n="SHIFT_TAB_ADD">新增排班</button>
             <button class="shift-tab" data-tab="batch" data-i18n="SHIFT_TAB_BATCH">批量排班</button>
+            <button class="shift-tab" data-tab="weekly" data-i18n="SHIFT_TAB_WEEKLY">固定班表</button>
             <button class="shift-tab" data-tab="stats" data-i18n="SHIFT_TAB_STATS">統計分析</button>
             <button class="shift-tab" data-tab="templates" data-i18n="SHIFT_TAB_TEMPLATES" style="display:none;">班別設定</button>
         </div>
@@ -1041,6 +1053,58 @@
                 <div class="btn-group">
                     <button type="button" class="btn btn-secondary" id="add-template-btn" data-i18n="SHIFT_TPL_ADD">新增班別</button>
                     <button type="button" class="btn btn-primary" id="save-templates-btn" data-i18n="SHIFT_TPL_SAVE">儲存班別設定</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 固定班表：每週固定的班，依星期自動產生排班 -->
+        <div id="weekly-tab" class="tab-content">
+            <div class="shift-card">
+                <h2 data-i18n="SHIFT_WEEKLY_TITLE">固定班表</h2>
+                <p class="shift-templates-desc" data-i18n="SHIFT_WEEKLY_DESC">每位員工每週固定上的班。空白代表那天休息。存好之後到下方選日期，系統會依星期幾自動排好班。</p>
+                <div class="shift-templates-scroll">
+                    <table class="shift-templates-table weekly-table">
+                        <thead>
+                            <tr>
+                                <th data-i18n="SHIFT_EMPLOYEE_LABEL">員工</th>
+                                <th data-i18n="WEEK_MONDAY">一</th>
+                                <th data-i18n="WEEK_TUESDAY">二</th>
+                                <th data-i18n="WEEK_WEDNESDAY">三</th>
+                                <th data-i18n="WEEK_THURSDAY">四</th>
+                                <th data-i18n="WEEK_FRIDAY">五</th>
+                                <th data-i18n="WEEK_SATURDAY">六</th>
+                                <th data-i18n="WEEK_SUNDAY">日</th>
+                                <th data-i18n="SHIFT_LOCATION_LABEL">地點</th>
+                            </tr>
+                        </thead>
+                        <tbody id="weekly-body"></tbody>
+                    </table>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-primary" id="save-weekly-btn" data-i18n="SHIFT_WEEKLY_SAVE">儲存固定班表</button>
+                </div>
+
+                <div class="weekly-generate">
+                    <h3 data-i18n="SHIFT_WEEKLY_GENERATE_TITLE">產生排班</h3>
+                    <p class="shift-templates-desc" data-i18n="SHIFT_WEEKLY_GENERATE_DESC">依固定班表把這段日期排好。員工那天已經有班就跳過，不會重複排。</p>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label data-i18n="SHIFT_START_DATE">開始日期</label>
+                            <input type="date" id="weekly-start-date">
+                        </div>
+                        <div class="form-group">
+                            <label data-i18n="SHIFT_END_DATE">結束日期</label>
+                            <input type="date" id="weekly-end-date">
+                        </div>
+                    </div>
+                    <label class="weekly-replace">
+                        <input type="checkbox" id="weekly-replace">
+                        <span data-i18n="SHIFT_WEEKLY_REPLACE">固定班表改過了：先刪掉這段期間由固定班表產生、還沒改過的班再重排（手動排的、改過的班不會動）</span>
+                    </label>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-primary" id="generate-weekly-btn" data-i18n="SHIFT_WEEKLY_GENERATE">產生排班</button>
+                    </div>
+                    <div id="weekly-result" class="weekly-result"></div>
                 </div>
             </div>
         </div>

@@ -252,6 +252,185 @@ async function saveShiftTemplates() {
     }
 }
 
+// ---------- 固定班表分頁（管理員、排班人員） ----------
+//
+// 每位員工星期一到日各選一個班別，存好之後選日期「產生排班」，後端依星期幾排好
+// （規則見 GS/WeeklyPattern.gs）。
+
+// 表格欄位順序：星期一 … 星期日（後端 1 = 一 … 7 = 日）
+const WEEKLY_DAYS = [1, 2, 3, 4, 5, 6, 7];
+let weeklyPattern = [];
+
+async function loadWeeklyPattern() {
+    try {
+        const data = await apiRequestJson('getWeeklyPattern');
+        if (!data.ok) {
+            showMessage(data.msg || t('SHIFT_WEEKLY_LOAD_FAILED'), 'error');
+            return;
+        }
+        weeklyPattern = data.pattern || [];
+        renderWeeklyTable();
+    } catch (error) {
+        console.error('載入固定班表失敗:', error);
+        showMessage(t('SHIFT_WEEKLY_LOAD_FAILED'), 'error');
+    }
+}
+
+function renderWeeklyTable() {
+    const body = document.getElementById('weekly-body');
+    if (!body) return;
+    body.innerHTML = '';
+
+    const active = shiftTemplates.filter(tpl => tpl.active && tpl.startTime);
+    // 員工名單 + 固定班表裡有、但名單上已經沒有的人（離職等），讓他們的班看得到也清得掉
+    const people = allEmployees.filter(e => e.userId && e.name).map(e => ({ userId: e.userId, name: e.name }));
+    weeklyPattern.forEach(p => {
+        if (!people.some(e => String(e.userId) === String(p.employeeId))) {
+            people.push({ userId: p.employeeId, name: p.employeeName || p.employeeId });
+        }
+    });
+
+    people.forEach(emp => {
+        const mine = weeklyPattern.filter(p => String(p.employeeId) === String(emp.userId));
+        const tr = document.createElement('tr');
+        tr.dataset.employeeId = emp.userId;
+        tr.dataset.name = emp.name;
+
+        const nameCell = document.createElement('td');
+        nameCell.textContent = emp.name;
+        tr.appendChild(nameCell);
+
+        WEEKLY_DAYS.forEach(day => {
+            const td = document.createElement('td');
+            const select = document.createElement('select');
+            select.dataset.weekday = day;
+            select.add(new Option(t('SHIFT_WEEKLY_OFF'), ''));
+            active.forEach(tpl => select.add(new Option(`${tpl.code}｜${tpl.name}`, tpl.code)));
+            const current = mine.find(p => Number(p.weekday) === day);
+            if (current) {
+                // 班別停用或刪掉了：保留原本的代碼，存檔時後端會提醒
+                if (![...select.options].some(o => o.value === current.code)) {
+                    select.add(new Option(current.code, current.code));
+                }
+                select.value = current.code;
+            }
+            const mark = () => select.classList.toggle('has-shift', !!select.value);
+            select.addEventListener('change', mark);
+            mark();
+            td.appendChild(select);
+            tr.appendChild(td);
+        });
+
+        const locTd = document.createElement('td');
+        const loc = document.createElement('select');
+        loc.className = 'weekly-location';
+        loc.add(new Option(t('SHIFT_WEEKLY_NO_LOCATION'), ''));
+        allLocations.forEach(l => loc.add(new Option(l.name, l.name)));
+        const savedLoc = (mine[0] && mine[0].location) || '';
+        if (savedLoc && ![...loc.options].some(o => o.value === savedLoc)) loc.add(new Option(savedLoc, savedLoc));
+        loc.value = savedLoc;
+        locTd.appendChild(loc);
+        tr.appendChild(locTd);
+
+        body.appendChild(tr);
+    });
+
+    if (!people.length) {
+        body.innerHTML = `<tr><td colspan="9">${escapeHtml(t('SHIFT_NO_EMPLOYEE_DATA'))}</td></tr>`;
+    }
+}
+
+async function saveWeeklyPattern() {
+    if (!checkSchedulingPermission('儲存固定班表')) return;
+    const button = document.getElementById('save-weekly-btn');
+    const pattern = [];
+    document.querySelectorAll('#weekly-body tr[data-employee-id]').forEach(tr => {
+        const location = tr.querySelector('.weekly-location').value;
+        tr.querySelectorAll('select[data-weekday]').forEach(select => {
+            if (!select.value) return;
+            pattern.push({
+                employeeId: tr.dataset.employeeId,
+                employeeName: tr.dataset.name,
+                weekday: Number(select.dataset.weekday),
+                code: select.value,
+                location: location
+            });
+        });
+    });
+
+    if (typeof generalButtonState === 'function') generalButtonState(button, 'processing', t('LOADING'));
+    try {
+        const data = await apiRequestJson(`saveWeeklyPattern&pattern=${encodeURIComponent(JSON.stringify(pattern))}`);
+        if (data.ok) {
+            weeklyPattern = data.pattern || [];
+            renderWeeklyTable();
+            showMessage(t('SHIFT_WEEKLY_SAVED'), 'success');
+        } else {
+            showMessage(data.msg || t('SHIFT_WEEKLY_SAVE_FAILED'), 'error');
+        }
+    } catch (error) {
+        console.error('儲存固定班表失敗:', error);
+        showMessage(t('SHIFT_WEEKLY_SAVE_FAILED'), 'error');
+    } finally {
+        if (typeof generalButtonState === 'function') generalButtonState(button, 'idle');
+    }
+}
+
+async function generateWeeklyShifts() {
+    if (!checkSchedulingPermission('產生排班')) return;
+    const start = document.getElementById('weekly-start-date').value;
+    const end = document.getElementById('weekly-end-date').value;
+    const replace = document.getElementById('weekly-replace').checked;
+    const resultBox = document.getElementById('weekly-result');
+    if (!start || !end) {
+        showMessage(t('SHIFT_WEEKLY_PICK_DATES'), 'error');
+        return;
+    }
+    if (start > end) {
+        showMessage(t('SHIFT_WEEKLY_DATE_ORDER'), 'error');
+        return;
+    }
+    if (!confirm(t(replace ? 'SHIFT_WEEKLY_CONFIRM_REPLACE' : 'SHIFT_WEEKLY_CONFIRM', { start, end }))) return;
+
+    const button = document.getElementById('generate-weekly-btn');
+    if (typeof generalButtonState === 'function') generalButtonState(button, 'processing', t('LOADING'));
+    try {
+        const query = new URLSearchParams({ startDate: start, endDate: end, replace: String(replace) }).toString();
+        const data = await apiRequestJson(`generateShiftsFromPattern&${query}`);
+        if (data.ok) {
+            let text = t('SHIFT_WEEKLY_RESULT', { added: data.added, skipped: data.skipped });
+            if (data.replaced) text += ' ' + t('SHIFT_WEEKLY_RESULT_REPLACED', { replaced: data.replaced });
+            if (data.unknownCodes && data.unknownCodes.length) {
+                text += ' ' + t('SHIFT_WEEKLY_RESULT_UNKNOWN', { codes: data.unknownCodes.join('、') });
+            }
+            resultBox.textContent = text;
+            showMessage(text, 'success');
+            document.getElementById('weekly-replace').checked = false;
+        } else {
+            resultBox.textContent = '';
+            showMessage(data.msg || t('SHIFT_WEEKLY_GENERATE_FAILED'), 'error');
+        }
+    } catch (error) {
+        console.error('產生排班失敗:', error);
+        showMessage(t('SHIFT_WEEKLY_GENERATE_FAILED'), 'error');
+    } finally {
+        if (typeof generalButtonState === 'function') generalButtonState(button, 'idle');
+    }
+}
+
+/** 產生排班預設日期：下週一到四週後的星期日 */
+function setDefaultWeeklyDates() {
+    const startEl = document.getElementById('weekly-start-date');
+    const endEl = document.getElementById('weekly-end-date');
+    if (!startEl || !endEl || startEl.value) return;
+    const start = new Date();
+    start.setDate(start.getDate() + ((8 - start.getDay()) % 7 || 7));
+    const end = new Date(start);
+    end.setDate(end.getDate() + 27);
+    startEl.value = toLocalDateStr(start);
+    endEl.value = toLocalDateStr(end);
+}
+
 // ========== 初始化 ==========
 document.addEventListener('DOMContentLoaded', async function() { 
     await loadTranslations(detectLang());
@@ -289,7 +468,7 @@ function initializeTabs() {
         tab.addEventListener('click', function() {
             const tabName = this.getAttribute('data-tab');
             //  檢查權限
-            if ((tabName === 'add' || tabName === 'batch') && !isAdmin && !isScheduler) {
+            if ((tabName === 'add' || tabName === 'batch' || tabName === 'weekly') && !isAdmin && !isScheduler) {
                 showMessage(t('SHIFT_NO_PERMISSION'), 'error');
                 return;
             }
@@ -322,6 +501,9 @@ function switchTab(tabName) {
         loadStats();
     } else if (tabName === 'templates') {
         renderTemplateEditor();
+    } else if (tabName === 'weekly') {
+        setDefaultWeeklyDates();
+        loadWeeklyPattern();
     }
 }
 
@@ -357,6 +539,10 @@ function setupEventListeners() {
     };
     const saveTplBtn = document.getElementById('save-templates-btn');
     if (saveTplBtn) saveTplBtn.onclick = saveShiftTemplates;
+    const saveWeeklyBtn = document.getElementById('save-weekly-btn');
+    if (saveWeeklyBtn) saveWeeklyBtn.onclick = saveWeeklyPattern;
+    const generateWeeklyBtn = document.getElementById('generate-weekly-btn');
+    if (generateWeeklyBtn) generateWeeklyBtn.onclick = generateWeeklyShifts;
 
     // 選了員工和日期，就列出他那天已經排的班（可以直接編輯、刪除）
     ['employee-select', 'shift-date'].forEach(id => {
@@ -480,6 +666,7 @@ async function loadUserPermissions() {
 function updateUIForPermissions() {
     const addTab = document.querySelector('[data-tab="add"]');
     const batchTab = document.querySelector('[data-tab="batch"]');
+    const weeklyTab = document.querySelector('[data-tab="weekly"]');
     const templatesTab = document.querySelector('[data-tab="templates"]');
     if (templatesTab) templatesTab.style.display = isAdmin ? 'block' : 'none';
     
@@ -493,15 +680,16 @@ function updateUIForPermissions() {
     if (!canSchedule) {
         if (addTab) addTab.style.display = 'none';
         if (batchTab) batchTab.style.display = 'none';
+        if (weeklyTab) weeklyTab.style.display = 'none';
         
         const activeTab = document.querySelector('.shift-tab.active');
-        if (activeTab && (activeTab.getAttribute('data-tab') === 'add' || 
-            activeTab.getAttribute('data-tab') === 'batch')) {
+        if (activeTab && ['add', 'batch', 'weekly'].includes(activeTab.getAttribute('data-tab'))) {
             switchTab('view');
         }
     } else {
         if (addTab) addTab.style.display = 'block';
         if (batchTab) batchTab.style.display = 'block';
+        if (weeklyTab) weeklyTab.style.display = 'block';
     }
 }
 /**
