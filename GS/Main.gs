@@ -11,6 +11,12 @@ const ROUTE_ACCESS = {
   addLocation: 'admin',
   updateLocation: 'admin',
   deleteLocation: 'admin',
+  adminListPunches: 'admin',
+  adminAddPunch: 'admin',
+  adminUpdatePunch: 'admin',
+  adminDeletePunch: 'admin',
+  adminGetLeaveBalances: 'admin',
+  adminSetLeaveBalance: 'admin',
   updateEmployeeName: 'admin',
   getEmployeeSalaryTW: 'admin',
   setEmployeeSalaryTW: 'admin',
@@ -68,6 +74,7 @@ const DEPLOY_CHECKS = [
   ['PayrollRules.gs', () => typeof applyPayrollRules_ === 'function' && typeof payrollAttendanceZh_ === 'function'],
   ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function'],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
+  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminSetLeaveBalance === 'function'],
   ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
   ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function'],
@@ -298,6 +305,18 @@ function doGet(e) {
         return respond1(handleGetShiftTemplates(e.parameter));
       case "saveShiftTemplates":
         return respond1(handleSaveShiftTemplates(e.parameter));
+      case "adminListPunches":
+        return respond1(handleAdminListPunches(e.parameter));
+      case "adminAddPunch":
+        return respond1(handleAdminAddPunch(e.parameter));
+      case "adminUpdatePunch":
+        return respond1(handleAdminUpdatePunch(e.parameter));
+      case "adminDeletePunch":
+        return respond1(handleAdminDeletePunch(e.parameter));
+      case "adminGetLeaveBalances":
+        return respond1(handleAdminGetLeaveBalances(e.parameter));
+      case "adminSetLeaveBalance":
+        return respond1(handleAdminSetLeaveBalance(e.parameter));
       case "getWeeklyPattern":
         return respond1(handleGetWeeklyPattern(e.parameter));
       case "saveWeeklyPattern":
