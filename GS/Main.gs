@@ -63,31 +63,37 @@ const ROUTE_ACCESS = {
 const DEPLOY_CHECKS = [
   ['AdminTools.gs', () => typeof batchInitializeAllEmployeesLeave === 'function'],
   ['Attachments.gs', () => typeof getAttachmentSheet_ === 'function'],
-  ['AuditLog.gs', () => typeof logAdminAction_ === 'function' && typeof getSalaryAuditSheet_ === 'function'],
+  ['AuditLog.gs', () => typeof logAdminAction_ === 'function' && typeof getSalaryAuditSheet_ === 'function' &&
+                         typeof ADMIN_AUDIT_SUMMARY_KEYS !== 'undefined'],
   ['Constants.gs', () => typeof getLeaveTypeInfo === 'function'],
   ['Dailysalary.gs', () => typeof calculateDailySalary === 'function'],
   ['DatabaseSetup.gs', () => typeof setupLeaveSystemDatabase === 'function'],
-  ['DbOperations.gs', () => typeof isEmployeeRowMisaligned_ === 'function' && typeof deleteLocation === 'function' && typeof writeSession_ === 'function' &&
+  ['DbOperations.gs', () => typeof isEmployeeRowMisaligned_ === 'function' && typeof deleteLocation === 'function' && punch.length >= 6 && typeof writeSession_ === 'function' &&
                             String(writeSession_).indexOf('createSessionForUser_') !== -1],
   ['EmployeeSheetRepair.gs', () => typeof readOriginalLockedNames_ === 'function'],
   ['Expense.gs', () => typeof handleReviewExpense === 'function'],
-  ['Handlers.gs', () => typeof handleDeleteLocation === 'function' && typeof handleGetLoginUrl === 'function' && handleGetLoginUrl.length >= 1 &&
+  ['Handlers.gs', () => typeof handleDeleteLocation === 'function' && handleGetProfile.length >= 2 &&
+                         String(handleLinePunchWithToken).indexOf('recentSamePunch_') !== -1 &&
+                         typeof handleGetLoginUrl === 'function' && handleGetLoginUrl.length >= 1 &&
                          String(handleLinePunchWithToken).indexOf('checkPunchSequence_') !== -1],
   ['LeaveManagement.gs', () => typeof submitLeaveRequest === 'function'],
   ['LineApi.gs', () => typeof getLineUserInfo_ === 'function'],
-  ['LineBotPunch.gs', () => typeof executePunch === 'function' && String(determinePunchType).indexOf('nextPunchType_') !== -1],
+  ['LineBotPunch.gs', () => typeof executePunch === 'function' && typeof sweepLinePunchTokens_ === 'function' &&
+                             String(determinePunchType).indexOf('nextPunchType_') !== -1],
   ['LineNotification.gs', () => typeof sendLineNotification_ === 'function' &&
                                  String(sendLineNotification_).indexOf('isLineUserId_') !== -1],
-  ['LoginLinks.gs', () => typeof handleRedeemLoginLink === 'function' && typeof createSessionForUser_ === 'function'],
+  ['LoginLinks.gs', () => typeof handleRedeemLoginLink === 'function' && typeof createSessionForUser_ === 'function' &&
+                           typeof bindLineAccount_ === 'function'],
   ['Offboarding.gs', () => typeof handleOffboardEmployee === 'function'],
   ['OvertimeOperations.gs', () => typeof initOvertimeSheet === 'function'],
   ['PayrollRules.gs', () => typeof applyPayrollRules_ === 'function' && typeof payrollAttendanceZh_ === 'function'],
-  ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function'],
+  ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function' &&
+                           typeof recentSamePunch_ === 'function' && PUNCH_MAX_PER_TYPE === 3],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
   ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminUpdateSheetRow === 'function'],
   ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
-  ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function'],
+  ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function' && String(updateShift).indexOf('updateData.employeeId') !== -1],
   ['ShiftTemplates.gs', () => typeof computeNetWorkMinutes_ === 'function' && typeof handleSaveShiftTemplates === 'function'],
   ['SystemSettings.gs', () => typeof validatePayrollRules_ === 'function'],
   ['Utils.gs', () => typeof getParam === 'function' && typeof getSheetValues_ === 'function'],
