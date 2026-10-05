@@ -709,87 +709,318 @@ function handleAdminCancelOvertime(params) {
   }
 }
 
-// ==================== 資料表瀏覽（唯讀） ====================
+// ==================== 資料表（試算表裡的每一張工作表：查、新增、修改、刪除） ====================
 //
-// 其他重要的表只開放查看、搜尋、下載：它們各有修改的地方（薪資頁、審核區、員工管理），
-// 直接改原始資料容易和系統的計算對不起來。身分證、帳號這類欄位一律遮住。
+// 管理員不用打開 Google 試算表，直接在網頁上操作任何一張表。
+//   ・登入憑證（Session、登入連結）不列出：看得到就能冒用別人登入
+//   ・稽核記錄（管理操作記錄、薪資異動記錄）只能看：能改就失去記錄的意義
+//   ・修改用「列號 + 指紋」指定：清單載入後有人動過那一列（或列號位移），就拒絕，不會改錯列
+//   ・寫回時照原本的格式：日期還是日期、數字還是數字，0912… 這類號碼不會被試算表轉成數字；
+//     只寫有改到的格子，公式不會被蓋掉
 
-const BROWSE_SHEETS = [
-  { key: 'employees', name: '員工名單' },
-  { key: 'employeeInfo', name: '員工基本資料' },
-  { key: 'shifts', name: '排班表' },
-  { key: 'adjustPunch', name: '補打卡申請' },
-  { key: 'expense', name: '費用申請' },
-  { key: 'worklog', name: '工作日誌' },
-  { key: 'bonus', name: '獎金發放記錄' },
-  { key: 'salaryConfig', name: '員工薪資設定' },
-  { key: 'monthlySalary', name: '月薪資記錄' },
-  { key: 'adminAudit', name: '管理操作記錄' },
-  { key: 'salaryAudit', name: '薪資異動記錄' }
-];
-const BROWSE_MASK_HEADER = /身分證|身份證|證號|帳號|帳戶|銀行|密碼|token|session|idNumber|account|password|secret/i;
-const BROWSE_MAX_ROWS = 500;
+const SHEET_EDITOR_HIDDEN = ['Session', '登入連結'];
+const SHEET_EDITOR_READONLY = ['管理操作記錄', '薪資異動記錄'];
+const SHEET_EDITOR_PAGE_SIZE = 100;
+// 這些欄位的內容不寫進管理操作記錄（只記「已修改」）
+const SHEET_EDITOR_SENSITIVE = /身分證|身份證|證號|帳號|帳戶|銀行|密碼|idNumber|account|password|secret/i;
 
-/** API：可以瀏覽的資料表清單（有建立的才列） */
+function editorAuditText_(header, text) {
+  return SHEET_EDITOR_SENSITIVE.test(String(header || '')) ? '***' : text;
+}
+
+function editorSheet_(name) {
+  const sheetName = String(name || '');
+  if (!sheetName || SHEET_EDITOR_HIDDEN.indexOf(sheetName) !== -1) return null;
+  return SpreadsheetApp.getActive().getSheetByName(sheetName);
+}
+
+/** 儲存格 → { v: 顯示／編輯用文字, t: 型別 }。型別：date、datetime、time、number、bool、text */
+function editorCell_(value, tz) {
+  if (isDateValue_(value)) {
+    if (value.getFullYear() < 1901) return { v: Utilities.formatDate(value, tz, 'HH:mm'), t: 'time' };
+    const hms = Utilities.formatDate(value, tz, 'HH:mm:ss');
+    if (hms === '00:00:00') return { v: Utilities.formatDate(value, tz, 'yyyy-MM-dd'), t: 'date' };
+    return { v: Utilities.formatDate(value, tz, 'yyyy-MM-dd HH:mm:ss'), t: 'datetime' };
+  }
+  if (typeof value === 'number') return { v: String(value), t: 'number' };
+  if (typeof value === 'boolean') return { v: value ? 'TRUE' : 'FALSE', t: 'bool' };
+  return { v: value === null || value === undefined ? '' : String(value), t: 'text' };
+}
+
+function editorRowKey_(raw) {
+  const text = JSON.stringify(raw.map(v => isDateValue_(v) ? 'D' + v.getTime() : v));
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, text)
+    .map(b => ((b + 256) % 256).toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+/** 每一欄的型別（看前幾個有值的格子，最多的那種），新增列時用 */
+function editorColumnTypes_(values, width, tz) {
+  const types = [];
+  for (let c = 0; c < width; c++) {
+    const count = {};
+    let seen = 0;
+    for (let r = values.length - 1; r >= 1 && seen < 30; r--) {
+      const v = values[r][c];
+      if (v === '' || v === null || v === undefined) continue;
+      const t = editorCell_(v, tz).t;
+      count[t] = (count[t] || 0) + 1;
+      seen++;
+    }
+    types.push(Object.keys(count).sort((a, b) => count[b] - count[a])[0] || 'text');
+  }
+  return types;
+}
+
+/** 使用者輸入的文字 → 要寫進試算表的值（照欄位型別） */
+function editorParseInput_(text, type) {
+  const s = String(text === null || text === undefined ? '' : text).trim();
+  if (s === '') return '';
+  let m;
+  if (type === 'date' || type === 'datetime') {
+    m = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0));
+    throw new Error(`「${s}」不是日期，請用 2026-10-05 或 2026-10-05 18:30 這種格式`);
+  }
+  if (type === 'time') {
+    m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (m && Number(m[1]) < 24 && Number(m[2]) < 60) return new Date(1899, 11, 30, Number(m[1]), Number(m[2]), 0);
+    throw new Error(`「${s}」不是時間，請用 18:30 這種格式`);
+  }
+  if (type === 'number') {
+    if (/^-?\d+(\.\d+)?$/.test(s.replace(/,/g, ''))) return Number(s.replace(/,/g, ''));
+    throw new Error(`「${s}」不是數字`);
+  }
+  if (type === 'bool') return /^(true|是|y|yes|1|v)$/i.test(s);
+  // 文字：加單引號，試算表就不會把 0912… 轉成數字、把 =… 當成公式
+  return /^[=+\-@]|^\d/.test(s) ? "'" + s : s;
+}
+
+function editorReadOnly_(name) {
+  return SHEET_EDITOR_READONLY.indexOf(name) !== -1;
+}
+
+/** API：試算表裡所有工作表（實際名稱、資料列數、是否唯讀） */
 function handleAdminListSheets(params) {
-  const admin = requireRecordsAdmin_(params.token);
-  if (!admin.ok) return admin;
-  const ss = SpreadsheetApp.getActive();
-  return {
-    ok: true,
-    sheets: BROWSE_SHEETS.filter(s => ss.getSheetByName(s.name)).map(s => ({
-      key: s.key, name: s.name, rows: Math.max(0, ss.getSheetByName(s.name).getLastRow() - 1)
-    }))
-  };
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const sheets = SpreadsheetApp.getActive().getSheets()
+      .filter(sh => SHEET_EDITOR_HIDDEN.indexOf(sh.getName()) === -1)
+      .map(sh => ({ name: sh.getName(), rows: Math.max(0, sh.getLastRow() - 1), readOnly: editorReadOnly_(sh.getName()) }));
+    return { ok: true, sheets: sheets };
+  } catch (error) {
+    Logger.log(' handleAdminListSheets 錯誤: ' + error.message);
+    return { ok: false, msg: '讀取工作表清單失敗：' + error.message };
+  }
 }
 
 /**
- * API：讀一張資料表（最新的在前，最多 500 列）
- * 參數：sheet（BROWSE_SHEETS 的 key）、keyword（比對整列文字，可省略）
+ * API：讀一張工作表（最新的在前，每頁 100 列）
+ * 參數：sheet（工作表名稱）、keyword（整列搜尋）、column（欄位編號，0 起算）＋ value（該欄包含的文字）、page（0 起算）
  */
 function handleAdminBrowseSheet(params) {
   try {
     const admin = requireRecordsAdmin_(params.token);
     if (!admin.ok) return admin;
-    const def = BROWSE_SHEETS.find(s => s.key === params.sheet);
-    if (!def) return { ok: false, code: 'RECORDS_INVALID', msg: '不能瀏覽這張表' };
-    const sheet = SpreadsheetApp.getActive().getSheetByName(def.name);
-    if (!sheet) return { ok: true, name: def.name, headers: [], rows: [], total: 0 };
+    const sheet = editorSheet_(params.sheet);
+    if (!sheet) return { ok: false, code: 'RECORDS_NO_SHEET', msg: '找不到這張工作表' };
 
     const tz = Session.getScriptTimeZone();
-    const values = sheet.getDataRange().getValues();
-    if (!values.length) return { ok: true, name: def.name, headers: [], rows: [], total: 0 };
-    const headers = values[0].map(h => String(h || '').trim());
-    // 表頭空白的欄位不顯示（通常是沒用到的欄）
-    const cols = headers.map((h, i) => i).filter(i => headers[i]);
-    const masked = cols.map(i => BROWSE_MASK_HEADER.test(headers[i]));
-    const keyword = String(params.keyword || '').trim().toLowerCase();
-
-    const cellText = v => {
-      if (isDateValue_(v)) {
-        // 只有時間的儲存格（試算表存成 1899-12-30）只顯示時間
-        return v.getFullYear() < 1901 ? Utilities.formatDate(v, tz, 'HH:mm') : Utilities.formatDate(v, tz, 'yyyy-MM-dd HH:mm').replace(/ 00:00$/, '');
-      }
-      return v === null || v === undefined ? '' : String(v);
-    };
-
-    const rows = [];
-    let total = 0;
-    for (let i = values.length - 1; i >= 1; i--) {
-      const raw = values[i];
-      if (!raw.some(v => v !== '' && v !== null)) continue;
-      const out = cols.map((c, j) => {
-        const text = cellText(raw[c]);
-        if (!masked[j] || !text) return text;
-        return text.length <= 4 ? '****' : '****' + text.slice(-4);
-      });
-      if (keyword && !out.join(' ').toLowerCase().includes(keyword)) continue;
-      total++;
-      if (rows.length < BROWSE_MAX_ROWS) rows.push(out);
+    const name = sheet.getName();
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 1 || lastCol < 1) {
+      return { ok: true, name: name, readOnly: editorReadOnly_(name), headers: [], types: [], rows: [], total: 0, page: 0, pageSize: SHEET_EDITOR_PAGE_SIZE };
     }
-    return { ok: true, name: def.name, headers: cols.map(i => headers[i]), rows: rows, total: total, limit: BROWSE_MAX_ROWS };
+    const values = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+    const headers = values[0].map((h, i) => String(h === null || h === undefined ? '' : h).trim());
+    const types = editorColumnTypes_(values, lastCol, tz);
+
+    const keyword = String(params.keyword || '').trim().toLowerCase();
+    const column = params.column === '' || params.column === undefined ? -1 : Number(params.column);
+    const columnValue = String(params.value || '').trim().toLowerCase();
+    const page = Math.max(0, parseInt(params.page, 10) || 0);
+
+    const matched = [];
+    for (let r = values.length - 1; r >= 1; r--) {
+      const raw = values[r];
+      if (!raw.some(v => v !== '' && v !== null)) continue;
+      const cells = raw.map(v => editorCell_(v, tz));
+      if (keyword && !cells.map(c => c.v).join(' ').toLowerCase().includes(keyword)) continue;
+      if (column >= 0 && columnValue && !(cells[column] && cells[column].v.toLowerCase().includes(columnValue))) continue;
+      matched.push({ row: r + 1, raw: raw, cells: cells });
+    }
+
+    const slice = matched.slice(page * SHEET_EDITOR_PAGE_SIZE, (page + 1) * SHEET_EDITOR_PAGE_SIZE).map(item => ({
+      row: item.row,
+      key: editorRowKey_(item.raw),
+      cells: item.cells
+    }));
+    return {
+      ok: true, name: name, readOnly: editorReadOnly_(name),
+      headers: headers, types: types, rows: slice,
+      total: matched.length, page: page, pageSize: SHEET_EDITOR_PAGE_SIZE
+    };
   } catch (error) {
     Logger.log(' handleAdminBrowseSheet 錯誤: ' + error.message);
-    return { ok: false, msg: error.toString() };
+    return { ok: false, msg: '讀取工作表失敗：' + error.message };
+  }
+}
+
+function editorWritableSheet_(params) {
+  const sheet = editorSheet_(params.sheet);
+  if (!sheet) return { ok: false, code: 'RECORDS_NO_SHEET', msg: '找不到這張工作表' };
+  if (editorReadOnly_(sheet.getName())) return { ok: false, code: 'RECORDS_READONLY', msg: '這張表是稽核記錄，只能查看不能修改' };
+  return { ok: true, sheet: sheet };
+}
+
+function editorParseValues_(params) {
+  let values;
+  try {
+    values = JSON.parse(params.values || '[]');
+  } catch (e) {
+    return null;
+  }
+  return Array.isArray(values) ? values : null;
+}
+
+/**
+ * API：修改一列。只寫有變動的格子。
+ * 參數：sheet、row、key、values（JSON 陣列，每欄的文字，長度 = 欄數）
+ */
+function handleAdminUpdateSheetRow(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const target = editorWritableSheet_(params);
+    if (!target.ok) return target;
+    const sheet = target.sheet;
+    const input = editorParseValues_(params);
+    if (!input) return { ok: false, code: 'RECORDS_INVALID', msg: '資料格式錯誤' };
+
+    const tz = Session.getScriptTimeZone();
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const row = Number(params.row);
+      const lastCol = sheet.getLastColumn();
+      if (!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()) {
+        return { ok: false, code: 'RECORDS_STALE', msg: '這一列已經變動，請重新查詢' };
+      }
+      const raw = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
+      if (editorRowKey_(raw) !== String(params.key || '')) {
+        return { ok: false, code: 'RECORDS_STALE', msg: '這一列已經被改過或位置變了，請重新查詢' };
+      }
+      const all = sheet.getRange(1, 1, sheet.getLastRow(), lastCol).getValues();
+      const colTypes = editorColumnTypes_(all, lastCol, tz);
+      const headers = all[0];
+
+      const changes = [];
+      for (let c = 0; c < Math.min(lastCol, input.length); c++) {
+        const old = editorCell_(raw[c], tz);
+        const text = String(input[c] === null || input[c] === undefined ? '' : input[c]).trim();
+        if (text === old.v) continue;
+        const type = raw[c] === '' || raw[c] === null ? colTypes[c] : old.t;
+        let value;
+        try {
+          value = editorParseInput_(text, type);
+        } catch (e) {
+          return { ok: false, code: 'RECORDS_FORMAT', msg: `「${headers[c] || '第 ' + (c + 1) + ' 欄'}」：${e.message}` };
+        }
+        changes.push({ col: c + 1, value: value,
+          label: `${headers[c] || '第' + (c + 1) + '欄'}: ${editorAuditText_(headers[c], old.v)}→${editorAuditText_(headers[c], text)}` });
+      }
+      changes.forEach(ch => sheet.getRange(row, ch.col).setValue(ch.value));
+
+      params.changes = changes.length ? `${sheet.getName()} 第${row}列 ` + changes.map(ch => ch.label).join('; ') : '沒有變更';
+      params.values = '';
+      return { ok: true, changed: changes.length };
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (error) {
+    Logger.log(' handleAdminUpdateSheetRow 錯誤: ' + error.message);
+    return { ok: false, msg: '儲存失敗：' + error.message };
+  }
+}
+
+/**
+ * API：在表的最後新增一列
+ * 參數：sheet、values（JSON 陣列）
+ */
+function handleAdminAddSheetRow(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const target = editorWritableSheet_(params);
+    if (!target.ok) return target;
+    const sheet = target.sheet;
+    const input = editorParseValues_(params);
+    if (!input || !input.some(v => String(v || '').trim() !== '')) {
+      return { ok: false, code: 'RECORDS_INVALID', msg: '請至少填一個欄位' };
+    }
+
+    const tz = Session.getScriptTimeZone();
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const lastCol = Math.max(1, sheet.getLastColumn());
+      const all = sheet.getLastRow() > 0 ? sheet.getRange(1, 1, sheet.getLastRow(), lastCol).getValues() : [[]];
+      const colTypes = editorColumnTypes_(all, lastCol, tz);
+      const headers = all[0] || [];
+      const row = [];
+      for (let c = 0; c < lastCol; c++) {
+        try {
+          row.push(editorParseInput_(input[c], colTypes[c]));
+        } catch (e) {
+          return { ok: false, code: 'RECORDS_FORMAT', msg: `「${headers[c] || '第 ' + (c + 1) + ' 欄'}」：${e.message}` };
+        }
+      }
+      sheet.getRange(sheet.getLastRow() + 1, 1, 1, lastCol).setValues([row]);
+      params.changes = `${sheet.getName()} 新增：` + input.map((v, c) => editorAuditText_(headers[c], String(v || '').trim()))
+        .filter(Boolean).join(' | ').slice(0, 300);
+      params.values = '';
+      return { ok: true };
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (error) {
+    Logger.log(' handleAdminAddSheetRow 錯誤: ' + error.message);
+    return { ok: false, msg: '新增失敗：' + error.message };
+  }
+}
+
+/** API：刪除一列。參數：sheet、row、key */
+function handleAdminDeleteSheetRow(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const target = editorWritableSheet_(params);
+    if (!target.ok) return target;
+    const sheet = target.sheet;
+
+    const tz = Session.getScriptTimeZone();
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const row = Number(params.row);
+      if (!Number.isInteger(row) || row < 2 || row > sheet.getLastRow()) {
+        return { ok: false, code: 'RECORDS_STALE', msg: '這一列已經變動，請重新查詢' };
+      }
+      const raw = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (editorRowKey_(raw) !== String(params.key || '')) {
+        return { ok: false, code: 'RECORDS_STALE', msg: '這一列已經被改過或位置變了，請重新查詢' };
+      }
+      sheet.deleteRow(row);
+      const headers = sheet.getRange(1, 1, 1, raw.length).getValues()[0];
+      params.changes = `${sheet.getName()} 刪除第${row}列：` + raw.map((v, c) => editorAuditText_(headers[c], editorCell_(v, tz).v))
+        .filter(Boolean).join(' | ').slice(0, 300);
+      return { ok: true };
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (error) {
+    Logger.log(' handleAdminDeleteSheetRow 錯誤: ' + error.message);
+    return { ok: false, msg: '刪除失敗：' + error.message };
   }
 }

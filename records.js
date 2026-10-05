@@ -95,10 +95,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('otf-save').addEventListener('click', saveOvertime);
     document.getElementById('otf-cancel').addEventListener('click', closeOvertimeForm);
     ['otf-start', 'otf-end'].forEach(id => document.getElementById(id).addEventListener('change', fillOvertimeHours));
-    document.getElementById('br-search').addEventListener('click', browseSheet);
-    document.getElementById('br-sheet').addEventListener('change', browseSheet);
-    document.getElementById('br-keyword').addEventListener('keydown', e => { if (e.key === 'Enter') browseSheet(); });
-    document.getElementById('br-download').addEventListener('click', downloadBrowseCsv);
+    initSheetEditor();
 
     await Promise.all([loadEmployeeOptions(), loadLocationOptions()]);
     loadPunches();
@@ -623,55 +620,291 @@ async function cancelOvertime(rec, button) {
     });
 }
 
-// ==================== 其他資料表（唯讀） ====================
+// ==================== 資料表（任何工作表：新增、修改、刪除、篩選、搜尋） ====================
+//
+// 後端見 GS/RecordsAdmin.gs 的 handleAdminBrowseSheet 等。每一列用「列號 + 指紋」指定，
+// 清單載入後那一列被別人改過或位置變了，後端會拒絕，重新查詢就好。
+
+// 系統會照欄位位置讀這些表，提醒管理員不要亂填；有專用分頁的，建議用那邊
+const SHEET_HINTS = {
+    '打卡紀錄': 'RECORDS_SHEET_HINT_PUNCH',
+    '假期餘額': 'RECORDS_SHEET_HINT_LEAVE_BALANCE',
+    '請假紀錄': 'RECORDS_SHEET_HINT_LEAVES',
+    '加班申請': 'RECORDS_SHEET_HINT_OVERTIME',
+    '排班表': 'RECORDS_SHEET_HINT_SHIFTS',
+    '員工名單': 'RECORDS_SHEET_HINT_EMPLOYEES'
+};
+const SHEET_SENSITIVE = /身分證|身份證|證號|帳號|帳戶|銀行|密碼|idNumber|account|password|secret/i;
 
 let browseResult = null;
+let browsePage = 0;
 let sheetListLoaded = false;
+let editingSheetRow = null;   // null = 新增
+
+function initSheetEditor() {
+    const $ = id => document.getElementById(id);
+    $('br-search').addEventListener('click', () => { browsePage = 0; browseSheet(); });
+    $('br-sheet').addEventListener('change', () => {
+        browsePage = 0;
+        $('br-keyword').value = '';
+        $('br-value').value = '';
+        $('br-column').innerHTML = '';
+        browseSheet();
+    });
+    ['br-keyword', 'br-value'].forEach(id => $(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') { browsePage = 0; browseSheet(); }
+    }));
+    $('br-clear').addEventListener('click', () => {
+        $('br-keyword').value = '';
+        $('br-value').value = '';
+        $('br-column').value = '';
+        browsePage = 0;
+        browseSheet();
+    });
+    $('br-prev').addEventListener('click', () => { if (browsePage > 0) { browsePage--; browseSheet(); } });
+    $('br-next').addEventListener('click', () => { browsePage++; browseSheet(); });
+    $('br-add').addEventListener('click', () => openSheetRowDialog(null));
+    $('br-save').addEventListener('click', saveSheetRow);
+    $('br-cancel').addEventListener('click', closeSheetRowDialog);
+    $('br-dialog').addEventListener('click', e => { if (e.target.id === 'br-dialog') closeSheetRowDialog(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheetRowDialog(); });
+    $('br-download').addEventListener('click', downloadBrowseCsv);
+}
+
+function showBrowseError(text) {
+    const box = document.getElementById('br-error');
+    box.textContent = text || '';
+    box.classList.toggle('rec-hidden', !text);
+}
 
 async function loadSheetList() {
     if (sheetListLoaded) return;
     const select = document.getElementById('br-sheet');
+    select.innerHTML = `<option value="">${escapeHtml(t('LOADING'))}</option>`;
+    showBrowseError('');
     try {
         const data = await apiRequestJson('adminListSheets');
-        if (!data.ok) { recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
+        if (!data.ok) {
+            select.innerHTML = '';
+            showBrowseError(data.msg || t('RECORDS_LOAD_FAILED'));
+            return;
+        }
         select.innerHTML = '';
-        (data.sheets || []).forEach(sh => select.add(new Option(t('RECORDS_SHEET_OPTION', { name: sh.name, rows: sh.rows }), sh.key)));
+        (data.sheets || []).forEach(sh => {
+            const label = t('RECORDS_SHEET_OPTION', { name: sh.name, rows: sh.rows }) + (sh.readOnly ? ' ' + t('RECORDS_READONLY_TAG') : '');
+            select.add(new Option(label, sh.name));
+        });
+        if (!select.options.length) {
+            showBrowseError(t('RECORDS_NO_SHEETS'));
+            return;
+        }
         sheetListLoaded = true;
-        if (select.options.length) browseSheet();
+        browseSheet();
     } catch (error) {
-        console.error('載入資料表清單失敗:', error);
-        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+        console.error('載入工作表清單失敗:', error);
+        select.innerHTML = '';
+        // 留在畫面上，不只閃一下提示：選單空白時才知道為什麼
+        showBrowseError(t('RECORDS_LOAD_FAILED') + '（' + error.message + '）');
     }
 }
 
+function fillColumnFilter(headers) {
+    const select = document.getElementById('br-column');
+    const current = select.value;
+    if (select.options.length === headers.length + 1) return;   // 同一張表，不用重建
+    select.innerHTML = '';
+    select.add(new Option(t('OPTION_ALL'), ''));
+    headers.forEach((h, i) => select.add(new Option(h || t('RECORDS_COLUMN_N', { n: i + 1 }), String(i))));
+    if ([...select.options].some(o => o.value === current)) select.value = current;
+}
+
 async function browseSheet() {
-    const key = document.getElementById('br-sheet').value;
-    if (!key) return;
+    const sheet = document.getElementById('br-sheet').value;
+    if (!sheet) return;
     const head = document.getElementById('br-head');
     const body = document.getElementById('br-body');
     const summary = document.getElementById('br-summary');
-    head.innerHTML = '';
+    showBrowseError('');
     body.innerHTML = `<tr><td class="rec-empty">${escapeHtml(t('LOADING'))}</td></tr>`;
-    summary.textContent = '';
     try {
-        const query = new URLSearchParams({ sheet: key, keyword: document.getElementById('br-keyword').value.trim() }).toString();
+        const query = new URLSearchParams({
+            sheet: sheet,
+            keyword: document.getElementById('br-keyword').value.trim(),
+            column: document.getElementById('br-column').value,
+            value: document.getElementById('br-value').value.trim(),
+            page: browsePage
+        }).toString();
         const data = await apiRequestJson(`adminBrowseSheet&${query}`);
-        if (!data.ok) { body.innerHTML = ''; recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
-        browseResult = data;
-        head.innerHTML = `<tr>${(data.headers || []).map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>`;
-        summary.textContent = data.total > data.rows.length
-            ? t('RECORDS_BROWSE_LIMITED', { total: data.total, shown: data.rows.length })
-            : t('RECORDS_PUNCH_COUNT', { count: data.total });
-        if (!data.rows.length) {
-            body.innerHTML = `<tr><td colspan="${Math.max(1, data.headers.length)}" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`;
+        if (!data.ok) {
+            body.innerHTML = '';
+            showBrowseError(data.msg || t('RECORDS_LOAD_FAILED'));
             return;
         }
-        body.innerHTML = data.rows.map(row => `<tr>${row.map(v => `<td>${escapeHtml(v)}</td>`).join('')}</tr>`).join('');
+        browseResult = data;
+        renderSheetTable();
     } catch (error) {
-        console.error('讀取資料表失敗:', error);
+        console.error('讀取工作表失敗:', error);
         body.innerHTML = '';
-        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+        showBrowseError(t('RECORDS_LOAD_FAILED') + '（' + error.message + '）');
     }
+}
+
+function renderSheetTable() {
+    const data = browseResult;
+    const head = document.getElementById('br-head');
+    const body = document.getElementById('br-body');
+    const headers = data.headers || [];
+    const editable = !data.readOnly;
+    fillColumnFilter(headers);
+
+    const hintKey = SHEET_HINTS[data.name];
+    const warning = document.getElementById('br-warning');
+    const warnText = data.readOnly ? t('RECORDS_SHEET_READONLY') : (hintKey ? t(hintKey) : t('RECORDS_SHEET_HINT_GENERIC'));
+    warning.textContent = warnText;
+    warning.classList.toggle('rec-hidden', !warnText);
+    document.getElementById('br-add').style.display = editable ? '' : 'none';
+
+    const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
+    document.getElementById('br-summary').textContent = t('RECORDS_PAGE_INFO', { page: data.page + 1, pages: pages, total: data.total });
+    document.getElementById('br-prev').disabled = data.page <= 0;
+    document.getElementById('br-next').disabled = data.page + 1 >= pages;
+
+    head.innerHTML = `<tr><th>#</th>${headers.map((h, i) => `<th>${escapeHtml(h || t('RECORDS_COLUMN_N', { n: i + 1 }))}</th>`).join('')}${editable ? '<th class="sticky-ops"></th>' : ''}</tr>`;
+    if (!data.rows.length) {
+        body.innerHTML = `<tr><td colspan="${headers.length + 2}" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`;
+        return;
+    }
+    const masked = headers.map(h => SHEET_SENSITIVE.test(h));
+    body.innerHTML = data.rows.map((row, index) => `
+        <tr>
+            <td class="rownum">${row.row}</td>
+            ${row.cells.map((c, i) => {
+                const text = masked[i] && c.v ? (c.v.length <= 4 ? '****' : '****' + c.v.slice(-4)) : c.v;
+                return `<td${c.t === 'number' ? ' class="num"' : ''}>${escapeHtml(text)}</td>`;
+            }).join('')}
+            ${editable ? `<td class="ops">
+                <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-edit="${index}">${escapeHtml(t('BTN_EDIT'))}</button>
+                <button type="button" class="rec-btn rec-btn-danger rec-btn-sm" data-delete="${index}">${escapeHtml(t('BTN_DELETE'))}</button>
+            </td>` : ''}
+        </tr>`).join('');
+    body.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', () => openSheetRowDialog(data.rows[Number(btn.dataset.edit)])));
+    body.querySelectorAll('[data-delete]').forEach(btn => btn.addEventListener('click', () => deleteSheetRow(data.rows[Number(btn.dataset.delete)], btn)));
+}
+
+/** 欄位型別 → 輸入框。日期、時間用原生選擇器，手機上比較好按 */
+function sheetFieldInput(type, value) {
+    const input = document.createElement(type === 'text' && value.length > 60 ? 'textarea' : 'input');
+    if (type === 'date') input.type = 'date';
+    else if (type === 'time') input.type = 'time';
+    else if (type === 'datetime') { input.type = 'datetime-local'; input.step = 1; value = value.replace(' ', 'T'); }
+    else if (type === 'number') { input.type = 'number'; input.step = 'any'; }
+    else if (input.tagName === 'INPUT') input.type = 'text';
+    if (input.tagName === 'TEXTAREA') input.rows = 3;
+    input.value = value;
+    input.dataset.type = type;
+    return input;
+}
+
+function openSheetRowDialog(row) {
+    const data = browseResult;
+    if (!data || data.readOnly) return;
+    editingSheetRow = row;
+    const headers = data.headers || [];
+    document.getElementById('br-dialog-title').textContent = row
+        ? t('RECORDS_ROW_EDIT_TITLE', { sheet: data.name, row: row.row })
+        : t('RECORDS_ROW_ADD_TITLE', { sheet: data.name });
+    const box = document.getElementById('br-fields');
+    box.innerHTML = '';
+    headers.forEach((h, i) => {
+        const cell = row ? row.cells[i] : null;
+        const type = cell && cell.v !== '' ? cell.t : (data.types[i] || 'text');
+        const field = document.createElement('div');
+        field.className = 'rec-field';
+        const id = 'br-f-' + i;
+        const label = document.createElement('label');
+        label.htmlFor = id;
+        label.textContent = h || t('RECORDS_COLUMN_N', { n: i + 1 });
+        const input = sheetFieldInput(type, cell ? cell.v : '');
+        input.id = id;
+        input.dataset.col = i;
+        field.append(label, input);
+        box.appendChild(field);
+    });
+    document.getElementById('br-dialog').classList.remove('rec-hidden');
+    box.querySelector('input, textarea')?.focus();
+}
+
+function closeSheetRowDialog() {
+    editingSheetRow = null;
+    document.getElementById('br-dialog').classList.add('rec-hidden');
+}
+
+async function saveSheetRow() {
+    const data = browseResult;
+    const values = [...document.querySelectorAll('#br-fields [data-col]')].map(input => {
+        let v = input.value;
+        if (input.dataset.type === 'datetime') v = v.replace('T', ' ');
+        return v;
+    });
+    const editing = editingSheetRow;
+    const params = new URLSearchParams({ sheet: data.name, values: JSON.stringify(values) });
+    if (editing) { params.set('row', editing.row); params.set('key', editing.key); }
+    await withButton(document.getElementById('br-save'), async () => {
+        try {
+            const res = await apiRequestJson(`${editing ? 'adminUpdateSheetRow' : 'adminAddSheetRow'}&${params.toString()}`);
+            if (res.ok) {
+                recMessage(t(editing ? (res.changed === 0 ? 'RECORDS_ROW_NO_CHANGE' : 'RECORDS_ROW_SAVED') : 'RECORDS_ROW_ADDED'), 'success');
+                closeSheetRowDialog();
+                if (!editing) browsePage = 0;
+                sheetListLoaded = false;
+                await loadSheetListKeepSelection(data.name);
+            } else {
+                recMessage(res.msg || t('RECORDS_SAVE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('儲存失敗:', error);
+            recMessage(t('RECORDS_SAVE_FAILED'), 'error');
+        }
+    });
+}
+
+async function deleteSheetRow(row, button) {
+    const data = browseResult;
+    const preview = row.cells.map(c => c.v).filter(Boolean).slice(0, 4).join('｜');
+    if (!confirm(t('RECORDS_ROW_DELETE_CONFIRM', { sheet: data.name, row: row.row, preview: preview }))) return;
+    await withButton(button, async () => {
+        try {
+            const res = await apiRequestJson(`adminDeleteSheetRow&${new URLSearchParams({ sheet: data.name, row: row.row, key: row.key }).toString()}`);
+            if (res.ok) {
+                recMessage(t('RECORDS_ROW_DELETED'), 'success');
+                sheetListLoaded = false;
+                await loadSheetListKeepSelection(data.name);
+            } else {
+                recMessage(res.msg || t('RECORDS_DELETE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('刪除失敗:', error);
+            recMessage(t('RECORDS_DELETE_FAILED'), 'error');
+        }
+    });
+}
+
+/** 新增、刪除後筆數變了：重新讀清單（更新每張表的筆數），停在同一張表 */
+async function loadSheetListKeepSelection(name) {
+    const select = document.getElementById('br-sheet');
+    try {
+        const data = await apiRequestJson('adminListSheets');
+        if (data.ok) {
+            select.innerHTML = '';
+            (data.sheets || []).forEach(sh => select.add(new Option(
+                t('RECORDS_SHEET_OPTION', { name: sh.name, rows: sh.rows }) + (sh.readOnly ? ' ' + t('RECORDS_READONLY_TAG') : ''), sh.name)));
+            select.value = name;
+            sheetListLoaded = true;
+        }
+    } catch (error) {
+        console.warn('更新工作表清單失敗:', error);
+    }
+    await browseSheet();
 }
 
 function downloadBrowseCsv() {
@@ -685,7 +918,7 @@ function downloadBrowseCsv() {
         if (/^[=+\-@]/.test(text)) text = "'" + text;
         return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
     };
-    const lines = [browseResult.headers, ...browseResult.rows].map(row => row.map(cell).join(','));
+    const lines = [browseResult.headers, ...browseResult.rows.map(r => r.cells.map(c => c.v))].map(row => row.map(cell).join(','));
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

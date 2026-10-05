@@ -24,6 +24,9 @@ const ROUTE_ACCESS = {
   adminCancelOvertime: 'admin',
   adminListSheets: 'admin',
   adminBrowseSheet: 'admin',
+  adminUpdateSheetRow: 'admin',
+  adminAddSheetRow: 'admin',
+  adminDeleteSheetRow: 'admin',
   updateEmployeeName: 'admin',
   getEmployeeSalaryTW: 'admin',
   setEmployeeSalaryTW: 'admin',
@@ -81,7 +84,7 @@ const DEPLOY_CHECKS = [
   ['PayrollRules.gs', () => typeof applyPayrollRules_ === 'function' && typeof payrollAttendanceZh_ === 'function'],
   ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function'],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
-  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminBrowseSheet === 'function'],
+  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminUpdateSheetRow === 'function'],
   ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
   ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function'],
@@ -338,6 +341,12 @@ function doGet(e) {
         return respond1(handleAdminListSheets(e.parameter));
       case "adminBrowseSheet":
         return respond1(handleAdminBrowseSheet(e.parameter));
+      case "adminUpdateSheetRow":
+        return respond1(handleAdminUpdateSheetRow(e.parameter));
+      case "adminAddSheetRow":
+        return respond1(handleAdminAddSheetRow(e.parameter));
+      case "adminDeleteSheetRow":
+        return respond1(handleAdminDeleteSheetRow(e.parameter));
       case "getWeeklyPattern":
         return respond1(handleGetWeeklyPattern(e.parameter));
       case "saveWeeklyPattern":

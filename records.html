@@ -57,6 +57,22 @@
         .rec-hidden { display: none !important; }
         .rec-leave-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
         .rec-days { font-size: 12px; color: #666; }
+        .rec-warning { margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: #fef3c7; color: #78350f; font-size: 14px; line-height: 1.5; }
+        .rec-error { margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: #fee2e2; color: #991b1b; font-size: 14px; line-height: 1.5; }
+        .rec-pager { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .rec-pager .rec-summary { margin: 0; }
+        .rec-pager-btns { display: flex; gap: 8px; }
+        .rec-sheet-table td { max-width: 260px; overflow-wrap: anywhere; }
+        .rec-sheet-table .rownum { color: #94a3b8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .rec-sheet-table th.sticky-ops, .rec-sheet-table td.ops { position: sticky; right: 0; background: #fff; box-shadow: -6px 0 6px -6px rgba(0,0,0,.15); }
+        .rec-sheet-table th.sticky-ops { background: #1f4e79; }
+        .rec-dialog { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 900; display: flex; align-items: flex-start; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+        .rec-dialog-box { background: #fff; border-radius: 12px; padding: 20px; width: 100%; max-width: 640px; box-shadow: 0 20px 40px rgba(0,0,0,.25); }
+        .rec-dialog-box h2 { margin: 0 0 6px; font-size: 20px; }
+        .rec-dialog-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        .rec-dialog-fields .rec-field span.rec-days { font-size: 12px; }
+        html.dark .rec-dialog-box { background: #1f2937; }
+        html.dark .rec-sheet-table td.ops { background: #1f2937; }
         .rec-message { position: fixed; top: 16px; right: 16px; left: 16px; margin-left: auto; max-width: 420px; padding: 14px 18px; border-radius: 8px; color: #fff; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .rec-message.success { background: #2e7d32; }
         .rec-message.error { background: #c62828; }
@@ -93,7 +109,7 @@
                 <button type="button" class="rec-tab" data-tab="leave" data-i18n="RECORDS_TAB_LEAVE">假期餘額</button>
                 <button type="button" class="rec-tab" data-tab="leaves" data-i18n="RECORDS_TAB_LEAVES">請假紀錄</button>
                 <button type="button" class="rec-tab" data-tab="overtime" data-i18n="RECORDS_TAB_OVERTIME">加班紀錄</button>
-                <button type="button" class="rec-tab" data-tab="browse" data-i18n="RECORDS_TAB_BROWSE">其他資料表</button>
+                <button type="button" class="rec-tab" data-tab="browse" data-i18n="RECORDS_TAB_BROWSE">所有資料表</button>
             </div>
 
             <!-- 打卡紀錄 -->
@@ -315,30 +331,55 @@
                 </div>
             </section>
 
-            <!-- 其他資料表（唯讀） -->
+            <!-- 資料表：試算表裡的每一張工作表，可以新增、修改、刪除、篩選、搜尋 -->
             <section id="panel-browse" class="rec-panel">
                 <div class="rec-card">
-                    <h2 data-i18n="RECORDS_BROWSE_TITLE">其他資料表</h2>
-                    <p class="rec-desc" data-i18n="RECORDS_BROWSE_DESC">查看和搜尋試算表裡的其他資料，最新的在最上面。這裡只能看和下載；修改請到各自的頁面（員工管理、薪資、審核）。身分證、帳號等欄位只顯示末 4 碼。</p>
+                    <h2 data-i18n="RECORDS_BROWSE_TITLE">資料表</h2>
+                    <p class="rec-desc" data-i18n="RECORDS_BROWSE_DESC">試算表裡的每一張工作表都在這裡，最新的資料在最上面。可以直接新增、修改、刪除，所有修改都會留下管理操作記錄。</p>
                     <div class="rec-row">
-                        <div class="rec-field"><label for="br-sheet" data-i18n="RECORDS_BROWSE_SHEET">資料表</label><select id="br-sheet"></select></div>
-                        <div class="rec-field"><label for="br-keyword" data-i18n="RECORDS_BROWSE_KEYWORD">搜尋</label><input type="search" id="br-keyword"></div>
+                        <div class="rec-field"><label for="br-sheet" data-i18n="RECORDS_BROWSE_SHEET">工作表</label><select id="br-sheet"></select></div>
+                        <div class="rec-field"><label for="br-keyword" data-i18n="RECORDS_BROWSE_KEYWORD">搜尋（整列）</label><input type="search" id="br-keyword"></div>
+                        <div class="rec-field"><label for="br-column" data-i18n="RECORDS_BROWSE_FILTER_COL">篩選欄位</label><select id="br-column"></select></div>
+                        <div class="rec-field"><label for="br-value" data-i18n="RECORDS_BROWSE_FILTER_VALUE">欄位包含</label><input type="search" id="br-value"></div>
                     </div>
                     <div class="rec-actions">
                         <button type="button" id="br-search" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SEARCH">查詢</button>
+                        <button type="button" id="br-clear" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_CLEAR_FILTER">清除條件</button>
+                        <button type="button" id="br-add" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_ADD_ROW">新增一筆</button>
                         <button type="button" id="br-download" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_DOWNLOAD">下載 CSV</button>
                     </div>
+                    <div id="br-warning" class="rec-warning rec-hidden"></div>
+                    <div id="br-error" class="rec-error rec-hidden" role="alert"></div>
                 </div>
                 <div class="rec-card">
-                    <div id="br-summary" class="rec-summary"></div>
+                    <div class="rec-pager">
+                        <div id="br-summary" class="rec-summary"></div>
+                        <div class="rec-pager-btns">
+                            <button type="button" id="br-prev" class="rec-btn rec-btn-secondary rec-btn-sm" data-i18n="RECORDS_PREV_PAGE">上一頁</button>
+                            <button type="button" id="br-next" class="rec-btn rec-btn-secondary rec-btn-sm" data-i18n="RECORDS_NEXT_PAGE">下一頁</button>
+                        </div>
+                    </div>
                     <div class="rec-scroll">
-                        <table class="rec-table">
+                        <table class="rec-table rec-sheet-table">
                             <thead id="br-head"></thead>
                             <tbody id="br-body"></tbody>
                         </table>
                     </div>
                 </div>
             </section>
+
+            <!-- 新增／修改一筆（任何工作表） -->
+            <div id="br-dialog" class="rec-dialog rec-hidden" role="dialog" aria-modal="true" aria-labelledby="br-dialog-title">
+                <div class="rec-dialog-box">
+                    <h2 id="br-dialog-title"></h2>
+                    <p class="rec-desc" data-i18n="RECORDS_ROW_FORM_DESC">日期用 2026-10-05，時間用 18:30。空白就是不填。</p>
+                    <div id="br-fields" class="rec-dialog-fields"></div>
+                    <div class="rec-actions">
+                        <button type="button" id="br-save" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SAVE">儲存</button>
+                        <button type="button" id="br-cancel" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_CANCEL">取消</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 

@@ -215,6 +215,9 @@ const ADMIN_AUDIT_ACTIONS = {
   adminCancelLeave: '取消請假',
   adminUpdateOvertime: '修改加班',
   adminCancelOvertime: '取消加班',
+  adminAddSheetRow: '新增資料表資料',
+  adminUpdateSheetRow: '修改資料表資料',
+  adminDeleteSheetRow: '刪除資料表資料',
   saveWeeklyPattern: '修改固定班表',
   generateShiftsFromPattern: '依固定班表產生排班',
   updateUserRole: '變更權限',
@@ -256,6 +259,9 @@ const ADMIN_AUDIT_SKIP_PARAMS = ['action', 'token', 'callback', 'otoken', 'sessi
 const ADMIN_AUDIT_MASK_PATTERN = /idNumber|bankAccount|account|password|secret/i;
 const ADMIN_AUDIT_MAX_VALUE = 120;
 const ADMIN_AUDIT_MAX_DETAIL = 1000;
+// 後端自己整理的「改了什麼」說明，不是使用者送來的大包資料，可以記長一點
+const ADMIN_AUDIT_SUMMARY_KEYS = ['changes', 'before', 'deleted', 'cancelled'];
+const ADMIN_AUDIT_SUMMARY_MAX = 600;
 
 function getAdminAuditSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -287,6 +293,8 @@ function summarizeAuditParams_(params) {
     value = String(value);
     if (ADMIN_AUDIT_MASK_PATTERN.test(key)) {
       value = '***';
+    } else if (ADMIN_AUDIT_SUMMARY_KEYS.indexOf(key) !== -1) {
+      value = value.slice(0, ADMIN_AUDIT_SUMMARY_MAX);
     } else if (value.length > ADMIN_AUDIT_MAX_VALUE) {
       value = `(${value.length} 字元)`;
     }
