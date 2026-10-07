@@ -80,7 +80,7 @@ const SHEET_MONTHLY_SALARY_ENHANCED = "月薪資記錄";
 // const MIN_MONTHLY_SALARY = 29500;  // 月薪（正確值）
 // const MIN_HOURLY_SALARY = 196;     // 時薪（正確值）
 
-// ⭐⭐⭐ 2026 年台灣國定假日（完整版）
+// 2026 年台灣國定假日（預設值；實際用的清單在「國定假日」表，見 Holidays.gs）
 const TAIWAN_HOLIDAYS_2026 = [
   // 1月
   '2026-01-01', // 中華民國開國紀念日
@@ -121,29 +121,8 @@ const TAIWAN_HOLIDAYS_2026 = [
   '2026-12-25', // 行憲紀念日（軍公教放假）
 ];
 
-/**
- *  判斷是否為國定假日
- * @param {string} dateStr - 日期字串 (YYYY-MM-DD)
- * @returns {boolean}
- */
-function isNationalHoliday(dateStr) {
-  return TAIWAN_HOLIDAYS_2026.includes(dateStr);
-}
-
-/**
- *  提供前端國定假日清單
- *  前端原本只能靠星期判斷，落在平日的國定假日會被當成一般上班日，
- *  加班時數因此算成 0；有了這份清單就能跟後端用同一套判斷。
- * @returns {{ok: boolean, year: number, holidays: string[]}}
- */
-function handleGetHolidays() {
-  return {
-    ok: true,
-    year: 2026,
-    holidays: TAIWAN_HOLIDAYS_2026
-  };
-}
-
+// isNationalHoliday、handleGetHolidays 移到 Holidays.gs：清單改成管理員在網頁上維護，
+// 上面的 TAIWAN_HOLIDAYS_2026 只在還沒存過清單時當預設值。
 
 // 加班費率
 const OVERTIME_RATES = {

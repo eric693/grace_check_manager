@@ -1967,6 +1967,10 @@ function handleGetEmployeeMonthlyOvertime(params) {
  */
 function handleGetAnnouncements(params) {
   try {
+    // 公告可能是內部訊息：登入的員工才看得到
+    if (!params || !params.token || !validateSession(params.token)) {
+      return { ok: false, code: 'ERR_SESSION_INVALID', msg: '未授權或 session 已過期' };
+    }
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     let sheet = ss.getSheetByName('公告');
     

@@ -2087,8 +2087,9 @@ function checkSessionUncached_(sessionToken) {
       
       // 延長 Session：只在剩不到一半時才寫。以前每個請求都寫一次試算表，
       // 寫入後要等試算表重算，管理員讀資料、員工打卡都因此變慢
+      // 以前的登入期限設成 7,000 天：比現在的上限還長的，也重設成 90 天
       const remaining = expiredAt ? new Date(expiredAt).getTime() - Date.now() : 0;
-      if (!(remaining > SESSION_TTL_MS / 2)) {
+      if (!(remaining > SESSION_TTL_MS / 2) || remaining > SESSION_TTL_MS + 60 * 1000) {
         sh.getRange(i + 1, 4).setValue(new Date(new Date().getTime() + SESSION_TTL_MS));
       }
       

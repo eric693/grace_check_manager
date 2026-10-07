@@ -124,6 +124,7 @@
                 <button type="button" class="rec-tab active" data-tab="punches" data-i18n="RECORDS_TAB_PUNCHES">打卡紀錄</button>
                 <button type="button" class="rec-tab" data-tab="hours" data-i18n="RECORDS_TAB_HOURS">工時明細</button>
                 <button type="button" class="rec-tab" data-tab="pay" data-i18n="PAYRULE_TAB">計薪規則</button>
+                <button type="button" class="rec-tab" data-tab="holidays" data-i18n="HOLIDAY_TAB">國定假日</button>
                 <button type="button" class="rec-tab" data-tab="leave" data-i18n="RECORDS_TAB_LEAVE">假期餘額</button>
                 <button type="button" class="rec-tab" data-tab="leaves" data-i18n="RECORDS_TAB_LEAVES">請假紀錄</button>
                 <button type="button" class="rec-tab" data-tab="overtime" data-i18n="RECORDS_TAB_OVERTIME">加班紀錄</button>
@@ -284,6 +285,33 @@
                         <button type="button" id="pr-preview" class="rec-btn rec-btn-secondary" data-i18n="PAYRULE_PREVIEW">看本月試算</button>
                     </div>
                     <p class="rec-desc" style="margin-top:12px" data-i18n="PAYRULE_NOTE">時段怎麼判斷：看上班卡的時間，對應到當天適用、表定開始最晚而且上班卡不早於開始前 60 分鐘的那個時段。沒有設定任何時段的員工，照薪資設定的時薪 × 工時計算。</p>
+                </div>
+            </section>
+
+            <!-- 國定假日：每年在這裡加新的一年（GS/Holidays.gs） -->
+            <section id="panel-holidays" class="rec-panel">
+                <div class="rec-card">
+                    <h2 data-i18n="HOLIDAY_TITLE">國定假日</h2>
+                    <p class="rec-desc" data-i18n="HOLIDAY_DESC">請假時數、加班類型都照這份清單判斷國定假日。「加倍計薪」打勾的日子，計薪規則會把時薪乘上國定假日倍率；補假日要不要加倍，可以逐日決定。每年年底請把下一年的國定假日加進來（人事行政總處公布的行事曆）。</p>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="hd-year" data-i18n="HOLIDAY_YEAR">年份</label><select id="hd-year"></select></div>
+                    </div>
+                    <div class="rec-scroll" style="margin-top:12px">
+                        <table class="rec-table rec-pay-table">
+                            <thead><tr>
+                                <th data-i18n="RECORDS_DATE">日期</th>
+                                <th data-i18n="HOLIDAY_NAME">名稱</th>
+                                <th data-i18n="HOLIDAY_DOUBLE">加倍計薪</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id="hd-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="rec-actions">
+                        <button type="button" id="hd-add" class="rec-btn rec-btn-secondary" data-i18n="HOLIDAY_ADD">＋ 新增一天</button>
+                        <button type="button" id="hd-save" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SAVE">儲存</button>
+                    </div>
+                    <div id="hd-warning" class="rec-warning rec-hidden"></div>
                 </div>
             </section>
 

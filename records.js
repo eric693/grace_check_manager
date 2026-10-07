@@ -118,6 +118,7 @@ function switchRecordsTab(name) {
     document.querySelectorAll('.rec-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'panel-' + name));
     if (name === 'hours') loadMonthlyHours();
     if (name === 'pay') initPayRules();
+    if (name === 'holidays') loadHolidayEditor();
     if (name === 'leave') loadLeaveBalances();
     if (name === 'leaves') loadLeaves();
     if (name === 'overtime') loadOvertime();
@@ -1177,6 +1178,98 @@ async function savePayRules() {
             }
         } catch (error) {
             console.error('儲存計薪規則失敗:', error);
+            recMessage(t('RECORDS_SAVE_FAILED'), 'error');
+        }
+    });
+}
+
+// ==================== 國定假日（GS/Holidays.gs） ====================
+
+let holidayItems = [];
+let holidaysStarted = false;
+
+async function loadHolidayEditor() {
+    if (!holidaysStarted) {
+        holidaysStarted = true;
+        document.getElementById('hd-year').addEventListener('change', drawHolidays);
+        document.getElementById('hd-add').addEventListener('click', () => {
+            const year = document.getElementById('hd-year').value;
+            holidayItems.push({ date: `${year}-01-01`, name: '', doublePay: true, isNew: true });
+            drawHolidays();
+        });
+        document.getElementById('hd-save').addEventListener('click', saveHolidays);
+    }
+    try {
+        const data = await apiRequestJson('getHolidays', ADMIN_READ);
+        holidayItems = (data.items || (data.holidays || []).map(d => ({ date: d, name: '', doublePay: true }))).map(h => Object.assign({}, h));
+        fillHolidayYears();
+        drawHolidays();
+    } catch (error) {
+        console.error('載入國定假日失敗:', error);
+        recMessage(loadFailedText(error), 'error');
+    }
+}
+
+function fillHolidayYears() {
+    const select = document.getElementById('hd-year');
+    const current = select.value;
+    const thisYear = new Date().getFullYear();
+    const years = new Set([thisYear, thisYear + 1]);
+    holidayItems.forEach(h => years.add(Number(h.date.slice(0, 4))));
+    select.innerHTML = '';
+    [...years].sort().forEach(y => select.add(new Option(String(y), String(y))));
+    select.value = current && [...select.options].some(o => o.value === current) ? current : String(thisYear);
+    // 明年還沒有資料：提醒
+    const warn = document.getElementById('hd-warning');
+    const nextYearMissing = !holidayItems.some(h => h.date.startsWith(String(thisYear + 1)));
+    warn.textContent = nextYearMissing ? t('HOLIDAY_NEXT_YEAR_MISSING', { year: thisYear + 1 }) : '';
+    warn.classList.toggle('rec-hidden', !nextYearMissing);
+}
+
+function drawHolidays() {
+    const year = document.getElementById('hd-year').value;
+    const body = document.getElementById('hd-body');
+    const rows = holidayItems.map((h, i) => ({ h, i })).filter(x => x.h.isNew || x.h.date.startsWith(year));
+    if (!rows.length) {
+        body.innerHTML = `<tr><td colspan="4" class="rec-empty">${escapeHtml(t('HOLIDAY_EMPTY', { year }))}</td></tr>`;
+        return;
+    }
+    body.innerHTML = '';
+    rows.sort((a, b) => a.h.date.localeCompare(b.h.date)).forEach(({ h, i }) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="date" data-f="date"></td>
+            <td><input type="text" data-f="name" maxlength="30"></td>
+            <td style="text-align:center"><input type="checkbox" data-f="doublePay"></td>
+            <td class="ops"><button type="button" class="rec-btn rec-btn-danger rec-btn-sm" data-del>${escapeHtml(t('BTN_DELETE'))}</button></td>`;
+        tr.querySelector('[data-f="date"]').value = h.date;
+        tr.querySelector('[data-f="name"]').value = h.name || '';
+        tr.querySelector('[data-f="doublePay"]').checked = h.doublePay !== false;
+        tr.querySelector('[data-f="date"]').addEventListener('change', e => { h.date = e.target.value; });
+        tr.querySelector('[data-f="name"]').addEventListener('input', e => { h.name = e.target.value; });
+        tr.querySelector('[data-f="doublePay"]').addEventListener('change', e => { h.doublePay = e.target.checked; });
+        tr.querySelector('[data-del]').addEventListener('click', () => { holidayItems.splice(i, 1); drawHolidays(); });
+        body.appendChild(tr);
+    });
+}
+
+async function saveHolidays() {
+    const list = holidayItems.filter(h => h.date).map(h => ({ date: h.date, name: String(h.name || '').trim(), doublePay: h.doublePay !== false }));
+    await withButton(document.getElementById('hd-save'), async () => {
+        try {
+            const params = new URLSearchParams({ holidays: JSON.stringify(list) });
+            const data = await apiRequestJson(`saveHolidays&${params.toString()}`);
+            if (data.ok) {
+                holidayItems = (data.items || []).map(h => Object.assign({}, h));
+                try { localStorage.removeItem('holidays_cache'); } catch (e) { /* 私密模式等 */ }
+                recMessage(t('HOLIDAY_SAVED'), 'success');
+                fillHolidayYears();
+                drawHolidays();
+            } else {
+                recMessage(data.msg || t('RECORDS_SAVE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('儲存國定假日失敗:', error);
             recMessage(t('RECORDS_SAVE_FAILED'), 'error');
         }
     });

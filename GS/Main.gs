@@ -27,6 +27,7 @@ const ROUTE_ACCESS = {
   adminMonthlyHours: 'admin',
   getShiftPayConfig: 'admin',
   deleteSalaryRecord: 'admin',
+  saveHolidays: 'admin',
   saveShiftPayConfig: 'admin',
   adminUpdateSheetRow: 'admin',
   adminAddSheetRow: 'admin',
@@ -77,6 +78,7 @@ const DEPLOY_CHECKS = [
                             String(writeSession_).indexOf('createSessionForUser_') !== -1],
   ['EmployeeSheetRepair.gs', () => typeof readOriginalLockedNames_ === 'function'],
   ['Expense.gs', () => typeof handleReviewExpense === 'function'],
+  ['Holidays.gs', () => typeof isDoublePayHoliday_ === 'function' && typeof handleSaveHolidays === 'function'],
   ['Handlers.gs', () => typeof handleDeleteLocation === 'function' && handleGetProfile.length >= 2 &&
                          String(handleLinePunchWithToken).indexOf('recentSamePunch_') !== -1 &&
                          typeof handleGetLoginUrl === 'function' && handleGetLoginUrl.length >= 1 &&
@@ -624,6 +626,8 @@ function doGet(e) {
       // ==================== 假日清單 ====================
       case "getHolidays":
         return respond1(handleGetHolidays());
+      case "saveHolidays":
+        return respond1(handleSaveHolidays(e.parameter));
       
       // ==================== 測試端點 ====================
       case "initApp":
@@ -750,6 +754,15 @@ function doPost(e) {
       // LINE Webhook（有 events 屬性）
       if (postData.events && Array.isArray(postData.events)) {
         Logger.log(' 識別為 LINE Webhook 請求');
+
+        // Apps Script 讀不到 X-Line-Signature 標頭，沒辦法驗 LINE 的簽章，
+        // 改成 Webhook 網址帶一組只有 LINE 後台知道的 key（見 setupLineWebhookKey）。
+        // 還沒設定 key 時照舊處理，設定之後 key 不對的一律不處理。
+        if (!isLineWebhookKeyValid_(e)) {
+          Logger.log(' Webhook key 不符，忽略這個請求');
+          return ContentService.createTextOutput(JSON.stringify({ status: 'ok' }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
         Logger.log(' 收到 ' + postData.events.length + ' 個事件');
         
         // 處理每個事件
@@ -902,3 +915,35 @@ function verifyLineSignature_(body, signature) {
 
 // LineBotPunch.gs - 補充缺少的函數
 
+
+// ==================== LINE Webhook key ====================
+//
+// LINE 的官方做法是驗 X-Line-Signature，但 Apps Script 的 doPost 拿不到請求標頭。
+// 替代做法：Webhook 網址後面加 ?key=一組隨機字串，存在指令碼屬性 LINE_WEBHOOK_KEY；
+// 這組網址只填在 LINE Developers 後台，不會出現在網頁上，別人就送不了假的 LINE 訊息進來。
+
+function isLineWebhookKeyValid_(e) {
+  const expected = PropertiesService.getScriptProperties().getProperty('LINE_WEBHOOK_KEY');
+  if (!expected) return true;   // 還沒設定：照舊處理
+  const given = String((e && e.parameter && e.parameter.key) || '');
+  if (given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
+/**
+ * 在 Apps Script 編輯器執行一次：產生 key，並在執行記錄印出要貼到 LINE Developers 的 Webhook 網址。
+ * 已經有 key 就沿用（重複執行不會讓 LINE 那邊失效）；要換新的，先刪掉指令碼屬性 LINE_WEBHOOK_KEY 再執行。
+ */
+function setupLineWebhookKey() {
+  const props = PropertiesService.getScriptProperties();
+  let key = props.getProperty('LINE_WEBHOOK_KEY');
+  if (!key) {
+    key = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '').slice(0, 8);
+    props.setProperty('LINE_WEBHOOK_KEY', key);
+  }
+  const url = ScriptApp.getService().getUrl() + '?key=' + key;
+  Logger.log('請把 LINE Developers → Messaging API → Webhook URL 改成：\n' + url);
+  return url;
+}

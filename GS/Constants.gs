@@ -6,7 +6,10 @@ const LINE_CHANNEL_SECRET = PropertiesService.getScriptProperties().getProperty(
 const LINE_REDIRECT_URL   = "https://eric693.github.io/grace_check_manager/";
 
 // ==================== Session 設定 ====================
-const SESSION_TTL_MS = 7000 * 60 * 60 * 24; // 1 天
+// 登入期限 90 天，每次使用時剩不到一半就延長（見 checkSession_）：
+// 每天在用的人不會被登出，遺失或不再使用的手機 90 天後自動失效。
+// 員工離職時用「辦理離職」會立刻登出他所有的裝置。
+const SESSION_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const TOKEN_LENGTH   = 36;
 
 // ==================== 工作表名稱 ====================

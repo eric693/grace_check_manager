@@ -120,7 +120,9 @@ function computeShiftPay_(employeeId, yearMonth, config, attendance) {
     const p = String(day.date).split('-').map(Number);
     const jsDay = new Date(p[0], p[1] - 1, p[2], 12).getDay();
     const weekday = jsDay === 0 ? 7 : jsDay;
-    const holiday = typeof getDateType === 'function' && getDateType(day.date) === 'holiday';
+    // 國定假日而且設定「加倍計薪」才乘倍率（補假日要不要加倍，在國定假日清單逐日設定，見 Holidays.gs）
+    const holiday = typeof isDoublePayHoliday_ === 'function' ? isDoublePayHoliday_(day.date)
+      : (typeof getDateType === 'function' && getDateType(day.date) === 'holiday');
     const items = [];
 
     (day.segments || []).forEach(seg => {
