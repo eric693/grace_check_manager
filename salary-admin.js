@@ -36,16 +36,16 @@ const OVERTIME_RULE_FIELDS = [
 
 // 計薪規則（PayrollRules.gs）：金額與門檻
 const PAYROLL_RULE_FIELDS = [
-  { key: 'fullTimeAttendanceBonus', labelKey: 'PAYROLL_RULE_FT_ATTENDANCE',    fallback: '正職全勤獎金', step: '1' },
+  { key: 'fullTimeAttendanceBonus', labelKey: 'PAYROLL_RULE_FT_ATTENDANCE',    fallback: '月薪制全勤獎金', step: '1' },
   { key: 'lateGraceMinutes',        labelKey: 'PAYROLL_RULE_LATE_GRACE_MIN',   fallback: '遲到緩衝（分鐘）', step: '1' },
   { key: 'lateGraceTimes',          labelKey: 'PAYROLL_RULE_LATE_GRACE_TIMES', fallback: '每月可緩衝次數', step: '1' },
   { key: 'maxMissedPunches',        labelKey: 'PAYROLL_RULE_MAX_MISSED',       fallback: '每月可忘卡次數', step: '1' },
-  { key: 'partTimeAttendanceBonus', labelKey: 'PAYROLL_RULE_PT_ATTENDANCE',    fallback: '兼職全勤獎金', step: '1' },
-  { key: 'partTimeAttendanceHours', labelKey: 'PAYROLL_RULE_PT_HOURS',         fallback: '兼職全勤排班時數', step: '0.5' },
+  { key: 'partTimeAttendanceBonus', labelKey: 'PAYROLL_RULE_PT_ATTENDANCE',    fallback: '時薪制全勤獎金', step: '1' },
+  { key: 'partTimeAttendanceHours', labelKey: 'PAYROLL_RULE_PT_HOURS',         fallback: '時薪制全勤排班時數', step: '0.5' },
   { key: 'mealPerDay',              labelKey: 'PAYROLL_RULE_MEAL_PER_DAY',     fallback: '餐費（每天）', step: '1' },
   { key: 'mealMinHours',            labelKey: 'PAYROLL_RULE_MEAL_MIN_HOURS',   fallback: '餐費門檻（小時）', step: '0.5' },
-  { key: 'fullTimeBirthdayGift',    labelKey: 'PAYROLL_RULE_FT_BIRTHDAY',      fallback: '正職生日禮金', step: '1' },
-  { key: 'partTimeBirthdayGift',    labelKey: 'PAYROLL_RULE_PT_BIRTHDAY',      fallback: '兼職生日禮金', step: '1' },
+  { key: 'fullTimeBirthdayGift',    labelKey: 'PAYROLL_RULE_FT_BIRTHDAY',      fallback: '月薪制生日禮金', step: '1' },
+  { key: 'partTimeBirthdayGift',    labelKey: 'PAYROLL_RULE_PT_BIRTHDAY',      fallback: '時薪制生日禮金', step: '1' },
   { key: 'birthdayMinTenureMonths', labelKey: 'PAYROLL_RULE_BIRTHDAY_TENURE',  fallback: '生日禮金到職滿（月）', step: '1' }
 ];
 
