@@ -1301,7 +1301,7 @@
     "SALARY_TYPE_HINT_HOURLY": "Tính theo số giờ làm thực tế; lương giờ tối thiểu năm 2026 là 196 Đài tệ",
     "SALARY_TYPE_HINT_WEEKLY": "Trả lương hằng tuần, không khấu trừ BHLĐ, BHYT, bảo hiểm việc làm",
     "SALARY_BASE_HINT_MONTHLY": "Lương tháng tối thiểu năm 2026: 29.500 Đài tệ",
-    "SALARY_BASE_HINT_HOURLY": "Nhập lương giờ (tối thiểu năm 2026: 196 Đài tệ)",
+    "SALARY_BASE_HINT_HOURLY": "Nhập lương giờ (tối thiểu năm 2026: 196 Đài tệ). Nếu lương giờ khác nhau theo ca (ca tối, sáng thứ Bảy…), hãy đặt ở Quản lý dữ liệu → Quy tắc lương; ở đây chỉ cần nhập một mức (dùng cho lượt chấm ngoài ca và khấu trừ nghỉ phép)",
     "SALARY_BASE_HINT_WEEKLY": "Nhập lương tuần (hệ thống tự nhân với số tuần trong tháng)",
     "SALARY_BASE_HINT_DEFAULT": "Lương tối thiểu 2026: tháng 29.500 | giờ 196 Đài tệ",
     "SALARY_WEEKLY_NOT_APPLICABLE": "Không áp dụng cho lương tuần",

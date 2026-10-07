@@ -1285,7 +1285,7 @@
     "SALARY_TYPE_HINT_HOURLY": "依實際工作時數計算，2026年最低時薪 196 元",
     "SALARY_TYPE_HINT_WEEKLY": "每週領薪，不扣勞保、健保、就業保險等法定費用",
     "SALARY_BASE_HINT_MONTHLY": "2026年最低月薪 29,500 元",
-    "SALARY_BASE_HINT_HOURLY": "請輸入時薪金額（2026最低 196 元）",
+    "SALARY_BASE_HINT_HOURLY": "請輸入時薪金額（2026最低 196 元）。不同時段不同時薪（例如晚班、週六早班）請到「資料管理 → 計薪規則」設定，這裡填其中一種即可（沒有對應時段的打卡、請假扣款會用這裡的時薪）",
     "SALARY_BASE_HINT_WEEKLY": "請輸入每週薪資金額（系統自動乘以本月週數）",
     "SALARY_BASE_HINT_DEFAULT": "2026年基本工資: 月薪 29,500 元 | 時薪 196 元",
     "SALARY_WEEKLY_NOT_APPLICABLE": "週薪不適用",

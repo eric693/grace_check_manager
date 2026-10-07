@@ -1245,7 +1245,7 @@
     "SALARY_TYPE_HINT_HOURLY": "Dihitung dari jam kerja aktual; upah minimum per jam 2026 adalah NT$196",
     "SALARY_TYPE_HINT_WEEKLY": "Dibayar mingguan; tanpa potongan wajib asuransi tenaga kerja, kesehatan, dan pekerjaan",
     "SALARY_BASE_HINT_MONTHLY": "Upah minimum bulanan 2026: NT$29.500",
-    "SALARY_BASE_HINT_HOURLY": "Masukkan upah per jam (minimum 2026: NT$196)",
+    "SALARY_BASE_HINT_HOURLY": "Masukkan upah per jam (minimum 2026: NT$196). Jika upah per jam berbeda per periode (malam, pagi Sabtu, dll.), atur di Kelola Data → Aturan gaji; di sini cukup isi salah satu tarif (dipakai untuk absen di luar periode dan potongan cuti)",
     "SALARY_BASE_HINT_WEEKLY": "Masukkan gaji mingguan (otomatis dikalikan jumlah minggu bulan ini)",
     "SALARY_BASE_HINT_DEFAULT": "Upah minimum 2026: NT$29.500/bulan | NT$196/jam",
     "SALARY_WEEKLY_NOT_APPLICABLE": "Tidak berlaku untuk gaji mingguan",

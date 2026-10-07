@@ -1245,7 +1245,7 @@
     "SALARY_TYPE_HINT_HOURLY": "실제 근무 시간으로 계산하며, 2026년 최저 시급은 196元입니다",
     "SALARY_TYPE_HINT_WEEKLY": "매주 지급하며 노동보험·건강보험·고용보험 등 법정 공제가 없습니다",
     "SALARY_BASE_HINT_MONTHLY": "2026년 최저 월급 29,500元",
-    "SALARY_BASE_HINT_HOURLY": "시급을 입력하세요 (2026년 최저 196元)",
+    "SALARY_BASE_HINT_HOURLY": "시급을 입력하세요 (2026년 최저 196元). 시간대별로 시급이 다르면(야간, 토요일 오전 등) \"데이터 관리 → 급여 규칙\"에서 설정하고, 여기에는 그중 하나를 입력하세요(시간대 밖 기록과 휴가 공제에 사용)",
     "SALARY_BASE_HINT_WEEKLY": "주급을 입력하세요 (이번 달 주 수를 자동으로 곱합니다)",
     "SALARY_BASE_HINT_DEFAULT": "2026년 최저임금: 월 29,500元 | 시급 196元",
     "SALARY_WEEKLY_NOT_APPLICABLE": "주급에는 해당 없음",

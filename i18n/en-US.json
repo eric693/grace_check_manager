@@ -1266,7 +1266,7 @@
     "SALARY_TYPE_HINT_HOURLY": "Based on actual hours worked; 2026 minimum hourly wage is NT$196",
     "SALARY_TYPE_HINT_WEEKLY": "Paid weekly; no statutory labor, health or employment insurance deductions",
     "SALARY_BASE_HINT_MONTHLY": "2026 minimum monthly wage: NT$29,500",
-    "SALARY_BASE_HINT_HOURLY": "Enter the hourly rate (2026 minimum NT$196)",
+    "SALARY_BASE_HINT_HOURLY": "Enter the hourly rate (2026 minimum NT$196). For different rates by period (e.g. evening, Saturday morning), set them in Data Management → Pay rules; enter any one rate here (used for punches outside any period and for leave deductions)",
     "SALARY_BASE_HINT_WEEKLY": "Enter the weekly amount (multiplied by the number of weeks this month)",
     "SALARY_BASE_HINT_DEFAULT": "2026 minimum wage: NT$29,500/month | NT$196/hour",
     "SALARY_WEEKLY_NOT_APPLICABLE": "Not applicable to weekly pay",

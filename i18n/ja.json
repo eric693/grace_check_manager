@@ -1245,7 +1245,7 @@
     "SALARY_TYPE_HINT_HOURLY": "実労働時間で計算。2026年の最低時給は196元",
     "SALARY_TYPE_HINT_WEEKLY": "週払い。労保・健保・雇用保険などの法定控除はありません",
     "SALARY_BASE_HINT_MONTHLY": "2026年の最低月給は29,500元",
-    "SALARY_BASE_HINT_HOURLY": "時給を入力してください（2026年の最低額 196元）",
+    "SALARY_BASE_HINT_HOURLY": "時給を入力してください（2026年の最低額 196元）。時間帯で時給が違う場合（夜・土曜朝など）は「データ管理 → 給与ルール」で設定し、ここにはいずれか 1 つの時給を入力してください（時間帯外の打刻や休暇控除に使います）",
     "SALARY_BASE_HINT_WEEKLY": "週給額を入力してください（今月の週数を自動で掛けます）",
     "SALARY_BASE_HINT_DEFAULT": "2026年の最低賃金：月給 29,500元｜時給 196元",
     "SALARY_WEEKLY_NOT_APPLICABLE": "週給には適用されません",
