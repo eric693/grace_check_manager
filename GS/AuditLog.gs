@@ -215,6 +215,7 @@ const ADMIN_AUDIT_ACTIONS = {
   adminCancelLeave: '取消請假',
   adminUpdateOvertime: '修改加班',
   adminCancelOvertime: '取消加班',
+  saveShiftPayConfig: '修改計薪規則',
   adminAddSheetRow: '新增資料表資料',
   adminUpdateSheetRow: '修改資料表資料',
   adminDeleteSheetRow: '刪除資料表資料',

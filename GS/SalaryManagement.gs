@@ -1473,9 +1473,17 @@ function calculateHourlySalary(employeeId, yearMonth) {
     Logger.log(`⏱ 總工作時數: ${totalWorkHours.toFixed(1)}h`);
     
     // 4. 計算基本薪資（工作時數 × 時薪）
-    const basePay = totalWorkHours * hourlyRate;
+    let basePay = totalWorkHours * hourlyRate;
     
     Logger.log(` 基本薪資 = ${hourlyRate} × ${totalWorkHours.toFixed(2)} = $${Math.round(basePay)}`);
+
+    // 4.5 有設定「時段計薪」的員工：依時段時薪、保障時數、國定假日倍率逐段計算（見 ShiftPay.gs）
+    const shiftPay = (typeof computeShiftPayForMonth_ === 'function') ? computeShiftPayForMonth_(employeeId, yearMonth) : null;
+    if (shiftPay) {
+      basePay = shiftPay.totalPay;
+      totalWorkHours = Math.round(shiftPay.totalMinutes / 60 * 100) / 100;
+      Logger.log(` 時段計薪：${totalWorkHours}h（含保障計 ${Math.round(shiftPay.billedMinutes / 60 * 100) / 100}h）= $${basePay}`);
+    }
     
     // 5. ⭐ 取得加班記錄
     const overtimeRecords = getEmployeeMonthlyOvertime(employeeId, yearMonth);
@@ -1711,9 +1719,15 @@ function calculateHourlySalary(employeeId, yearMonth) {
     //  優先使用設定表中的數值（可能是 0 或其他值）
     laborFee = parseFloat(config['勞保費']) || 0;
     healthFee = parseFloat(config['健保費']) || 0;
+    // 時段計薪設定為「不扣勞健保」（有保但老闆負擔）：不扣，也不要套下面的預設值
+    const skipInsurance = !!(shiftPay && shiftPay.config && shiftPay.config.deductInsurance === false);
 
-    // 如果設定表中沒有值（都是 0），則使用預設值
-    if (laborFee === 0 && healthFee === 0 && parseFloat(config['基本薪資']) > 0) {
+    if (skipInsurance) {
+      laborFee = 0;
+      healthFee = 0;
+      Logger.log(' 時段計薪設定為不扣勞健保');
+    } else if (laborFee === 0 && healthFee === 0 && parseFloat(config['基本薪資']) > 0) {
+      // 如果設定表中沒有值（都是 0），則使用預設值
         Logger.log(' 設定表中扣款為 0，使用預設值');
         laborFee = 277;   // 預設勞保費
         healthFee = 458;  // 預設健保費

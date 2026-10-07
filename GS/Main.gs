@@ -25,6 +25,8 @@ const ROUTE_ACCESS = {
   adminListSheets: 'admin',
   adminBrowseSheet: 'admin',
   adminMonthlyHours: 'admin',
+  getShiftPayConfig: 'admin',
+  saveShiftPayConfig: 'admin',
   adminUpdateSheetRow: 'admin',
   adminAddSheetRow: 'admin',
   adminDeleteSheetRow: 'admin',
@@ -94,8 +96,10 @@ const DEPLOY_CHECKS = [
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
   ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminUpdateSheetRow === 'function' &&
                            typeof handleAdminMonthlyHours === 'function'],
-  ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3],
+  ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3 &&
+                               String(calculateHourlySalary).indexOf('computeShiftPayForMonth_') !== -1],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
+  ['ShiftPay.gs', () => typeof computeShiftPay_ === 'function' && typeof handleSaveShiftPayConfig === 'function'],
   ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function' && String(updateShift).indexOf('updateData.employeeId') !== -1],
   ['ShiftTemplates.gs', () => typeof computeNetWorkMinutes_ === 'function' && typeof handleSaveShiftTemplates === 'function'],
   ['SystemSettings.gs', () => typeof validatePayrollRules_ === 'function'],
@@ -352,6 +356,10 @@ function doGet(e) {
         return respond1(handleAdminBrowseSheet(e.parameter));
       case "adminMonthlyHours":
         return respond1(handleAdminMonthlyHours(e.parameter));
+      case "getShiftPayConfig":
+        return respond1(handleGetShiftPayConfig(e.parameter));
+      case "saveShiftPayConfig":
+        return respond1(handleSaveShiftPayConfig(e.parameter));
       case "adminUpdateSheetRow":
         return respond1(handleAdminUpdateSheetRow(e.parameter));
       case "adminAddSheetRow":

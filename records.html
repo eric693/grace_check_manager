@@ -83,6 +83,12 @@
             .rec-card { box-shadow: none; break-inside: avoid; padding: 8px 0; }
             body { background: #fff; }
         }
+        .rec-pay-table input[type="text"], .rec-pay-table input[type="time"], .rec-pay-table input[type="number"] { padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; width: 100%; min-width: 70px; }
+        .rec-pay-table .days { display: flex; gap: 4px; flex-wrap: nowrap; }
+        .rec-pay-table .days label { display: inline-flex; flex-direction: column; align-items: center; font-size: 12px; gap: 2px; cursor: pointer; }
+        .rec-pay-items { font-size: 12px; color: #475569; }
+        .rec-pay-total { font-size: 15px; color: #334155; margin-top: 4px; }
+        .rec-pay-total strong { font-size: 22px; color: #047857; margin: 0 4px; }
         .rec-message { position: fixed; top: 16px; right: 16px; left: 16px; margin-left: auto; max-width: 420px; padding: 14px 18px; border-radius: 8px; color: #fff; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .rec-message.success { background: #2e7d32; }
         .rec-message.error { background: #c62828; }
@@ -117,6 +123,7 @@
             <div class="rec-tabs">
                 <button type="button" class="rec-tab active" data-tab="punches" data-i18n="RECORDS_TAB_PUNCHES">打卡紀錄</button>
                 <button type="button" class="rec-tab" data-tab="hours" data-i18n="RECORDS_TAB_HOURS">工時明細</button>
+                <button type="button" class="rec-tab" data-tab="pay" data-i18n="PAYRULE_TAB">計薪規則</button>
                 <button type="button" class="rec-tab" data-tab="leave" data-i18n="RECORDS_TAB_LEAVE">假期餘額</button>
                 <button type="button" class="rec-tab" data-tab="leaves" data-i18n="RECORDS_TAB_LEAVES">請假紀錄</button>
                 <button type="button" class="rec-tab" data-tab="overtime" data-i18n="RECORDS_TAB_OVERTIME">加班紀錄</button>
@@ -224,6 +231,54 @@
                     </div>
                 </div>
                 <div id="hr-result"></div>
+            </section>
+
+            <!-- 計薪規則：不同時段不同時薪、晚班保障時數、國定假日倍率（GS/ShiftPay.gs） -->
+            <section id="panel-pay" class="rec-panel">
+                <div class="rec-card">
+                    <h2 data-i18n="PAYRULE_TITLE">計薪規則</h2>
+                    <p class="rec-desc" data-i18n="PAYRULE_DESC">每位員工可以設定不同時段的時薪。系統照每一段打卡計算：從「表定開始時間」和「實際上班卡」較晚的那個算到下班卡，精確到分鐘；不到保障時數就照保障時數算；國定假日時薪乘上倍率。設好之後，薪資計算和工時明細都會照這裡算。</p>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="pr-employee" data-i18n="SHIFT_EMPLOYEE_LABEL">員工</label><select id="pr-employee" class="employee-pick"><option value="" data-i18n="SHIFT_SELECT_EMPLOYEE">請選擇員工</option></select></div>
+                    </div>
+                </div>
+                <div id="pr-editor" class="rec-card rec-hidden">
+                    <h2 id="pr-title"></h2>
+                    <div class="rec-scroll">
+                        <table class="rec-table rec-pay-table">
+                            <thead><tr>
+                                <th data-i18n="PAYRULE_NAME">時段名稱</th>
+                                <th data-i18n="PAYRULE_DAYS">適用星期</th>
+                                <th data-i18n="PAYRULE_START">表定開始</th>
+                                <th data-i18n="PAYRULE_RATE">時薪</th>
+                                <th data-i18n="PAYRULE_MIN_HOURS">保障時數</th>
+                                <th></th>
+                            </tr></thead>
+                            <tbody id="pr-rules"></tbody>
+                        </table>
+                    </div>
+                    <div class="rec-actions" id="pr-presets">
+                        <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-preset="weekdayMorning" data-i18n="PAYRULE_ADD_WEEKDAY_MORNING">＋ 平日早班 08:50</button>
+                        <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-preset="saturdayMorning" data-i18n="PAYRULE_ADD_SATURDAY_MORNING">＋ 週六早班 08:30</button>
+                        <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-preset="afternoon" data-i18n="PAYRULE_ADD_AFTERNOON">＋ 下午班 15:00</button>
+                        <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-preset="evening" data-i18n="PAYRULE_ADD_EVENING">＋ 晚班 19:00（保障 3 小時）</button>
+                        <button type="button" class="rec-btn rec-btn-secondary rec-btn-sm" data-preset="custom" data-i18n="PAYRULE_ADD_CUSTOM">＋ 自訂時段</button>
+                    </div>
+                    <div class="rec-row" style="margin-top:16px">
+                        <div class="rec-field"><label for="pr-holiday" data-i18n="PAYRULE_HOLIDAY">國定假日時薪倍率</label><input type="number" id="pr-holiday" min="1" max="5" step="0.5" value="2"></div>
+                        <div class="rec-field"><label for="pr-insurance" data-i18n="PAYRULE_INSURANCE">勞健保</label>
+                            <select id="pr-insurance">
+                                <option value="yes" data-i18n="PAYRULE_INSURANCE_YES">照薪資設定扣</option>
+                                <option value="no" data-i18n="PAYRULE_INSURANCE_NO">不扣（有保但不從薪水扣）</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="rec-actions">
+                        <button type="button" id="pr-save" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SAVE">儲存</button>
+                        <button type="button" id="pr-preview" class="rec-btn rec-btn-secondary" data-i18n="PAYRULE_PREVIEW">看本月試算</button>
+                    </div>
+                    <p class="rec-desc" style="margin-top:12px" data-i18n="PAYRULE_NOTE">時段怎麼判斷：看上班卡的時間，對應到當天適用、表定開始最晚而且上班卡不早於開始前 60 分鐘的那個時段。沒有設定任何時段的員工，照薪資設定的時薪 × 工時計算。</p>
+                </div>
             </section>
 
             <!-- 假期餘額 -->

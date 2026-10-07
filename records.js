@@ -117,6 +117,7 @@ function switchRecordsTab(name) {
     document.querySelectorAll('.rec-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
     document.querySelectorAll('.rec-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'panel-' + name));
     if (name === 'hours') loadMonthlyHours();
+    if (name === 'pay') initPayRules();
     if (name === 'leave') loadLeaveBalances();
     if (name === 'leaves') loadLeaves();
     if (name === 'overtime') loadOvertime();
@@ -132,7 +133,7 @@ async function loadEmployeeOptions() {
     }
     const filter = document.getElementById('punch-employee');
     const form = document.getElementById('pf-employee');
-    const extra = [...document.querySelectorAll('select.employee-filter')];
+    const extra = [...document.querySelectorAll('select.employee-filter, select.employee-pick')];
     employees.forEach(u => {
         filter.add(new Option(u.name, u.userId));
         form.add(new Option(u.name, u.userId));
@@ -994,13 +995,16 @@ function renderMonthlyHours() {
                 <h2>${escapeHtml(emp.name)}・${escapeHtml(data.yearMonth)}</h2>
                 <div class="rec-hours-total">${escapeHtml(t('RECORDS_HOURS_TOTAL_PREFIX'))}<strong>${escapeHtml(String(emp.totalHours))}</strong>${escapeHtml(t('RECORDS_HOURS_TOTAL_SUFFIX', { days: emp.daysWorked }))}</div>
             </div>
+            ${emp.totalPay !== null && emp.totalPay !== undefined ? `<div class="rec-pay-total">${escapeHtml(t('PAYRULE_MONTH_PAY'))}<strong>${escapeHtml(Number(emp.totalPay).toLocaleString())}</strong>${escapeHtml(t('PAYRULE_MONTH_PAY_NOTE'))}</div>` : ''}
             ${emp.incompleteDays ? `<div class="rec-warning" style="margin:0 0 10px">${escapeHtml(t('RECORDS_HOURS_INCOMPLETE', { days: emp.incompleteDays }))}</div>` : ''}
+            ${(emp.payWarnings || []).length ? `<div class="rec-warning" style="margin:0 0 10px">${escapeHtml(payWarningText(emp.payWarnings))}</div>` : ''}
             <div class="rec-scroll">
                 <table class="rec-table">
                     <thead><tr>
                         <th>${escapeHtml(t('RECORDS_DATE'))}</th>
                         <th>${escapeHtml(t('RECORDS_HOURS_SEGMENTS'))}</th>
                         <th>${escapeHtml(t('RECORDS_HOURS'))}</th>
+                        ${emp.totalPay !== null && emp.totalPay !== undefined ? `<th>${escapeHtml(t('PAYRULE_PAY'))}</th>` : ''}
                         <th>${escapeHtml(t('RECORDS_NOTE'))}</th>
                     </tr></thead>
                     <tbody>${emp.days.length ? emp.days.map(day => {
@@ -1013,9 +1017,10 @@ function renderMonthlyHours() {
                             <td>${escapeHtml(dayLabel(day.date))}</td>
                             <td class="num" style="text-align:left">${escapeHtml(segmentText(day))}</td>
                             <td class="num">${escapeHtml(day.hours.toFixed(2))}</td>
+                            ${emp.totalPay !== null && emp.totalPay !== undefined ? `<td class="num">${escapeHtml(Number(day.pay || 0).toLocaleString())}<div class="rec-pay-items">${escapeHtml(payItemsText(day.payItems))}</div></td>` : ''}
                             <td>${escapeHtml(notes.join('；'))}</td>
                         </tr>`;
-                    }).join('') : `<tr><td colspan="4" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`}</tbody>
+                    }).join('') : `<tr><td colspan="5" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`}</tbody>
                 </table>
             </div>
         </div>`).join('');
@@ -1027,11 +1032,12 @@ function downloadMonthlyHoursCsv() {
         return;
     }
     const cell = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const lines = [[t('SHIFT_EMPLOYEE_LABEL'), t('RECORDS_DATE'), t('RECORDS_HOURS_SEGMENTS'), t('RECORDS_HOURS'), t('RECORDS_NOTE')].map(cell).join(',')];
+    const lines = [[t('SHIFT_EMPLOYEE_LABEL'), t('RECORDS_DATE'), t('RECORDS_HOURS_SEGMENTS'), t('RECORDS_HOURS'), t('PAYRULE_PAY'), t('RECORDS_NOTE')].map(cell).join(',')];
     monthlyHours.employees.forEach(emp => {
+        const hasPay = emp.totalPay !== null && emp.totalPay !== undefined;
         emp.days.forEach(day => lines.push([emp.name, day.date, segmentText(day), day.hours.toFixed(2),
-            day.unpaired ? t('RECORDS_HOURS_UNPAIRED') : ''].map(cell).join(',')));
-        lines.push([emp.name, t('RECORDS_HOURS_TOTAL_LABEL'), '', emp.totalHours.toFixed(2), ''].map(cell).join(','));
+            hasPay ? day.pay : '', [day.unpaired ? t('RECORDS_HOURS_UNPAIRED') : '', hasPay ? payItemsText(day.payItems) : ''].filter(Boolean).join('；')].map(cell).join(',')));
+        lines.push([emp.name, t('RECORDS_HOURS_TOTAL_LABEL'), '', emp.totalHours.toFixed(2), hasPay ? emp.totalPay : '', ''].map(cell).join(','));
     });
     const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -1041,4 +1047,135 @@ function downloadMonthlyHoursCsv() {
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+// ==================== 計薪規則（時段計薪，GS/ShiftPay.gs） ====================
+
+const PAY_DAY_KEYS = ['WEEK_MONDAY', 'WEEK_TUESDAY', 'WEEK_WEDNESDAY', 'WEEK_THURSDAY', 'WEEK_FRIDAY', 'WEEK_SATURDAY', 'WEEK_SUNDAY'];
+const PAY_PRESETS = {
+    weekdayMorning: { nameKey: 'PAYRULE_P_WEEKDAY_MORNING', days: [1, 2, 3, 4, 5], start: '08:50', minHours: 0 },
+    saturdayMorning: { nameKey: 'PAYRULE_P_SATURDAY_MORNING', days: [6], start: '08:30', minHours: 0 },
+    afternoon: { nameKey: 'PAYRULE_P_AFTERNOON', days: [1, 2, 3, 4, 5], start: '15:00', minHours: 0 },
+    evening: { nameKey: 'PAYRULE_P_EVENING', days: [1, 2, 3, 4, 5], start: '19:00', minHours: 3 },
+    custom: { nameKey: '', days: [1, 2, 3, 4, 5], start: '09:00', minHours: 0 }
+};
+let payRulesStarted = false;
+let payRules = [];
+
+/** 工時明細裡每段的說明：晚班 19:00 起 2:05→保障3小時 ×600 */
+function payItemsText(items) {
+    return (items || []).map(it => {
+        if (!it.rule) return t('PAYRULE_NO_RULE_SHORT', { time: `${it.in}–${it.out}` });
+        const hours = `${Math.floor(it.minutes / 60)}:${String(it.minutes % 60).padStart(2, '0')}`;
+        const min = it.billed > it.minutes ? t('PAYRULE_MIN_APPLIED', { hours: it.billed / 60 }) : '';
+        const holiday = (it.flags || []).includes('HOLIDAY') ? t('PAYRULE_HOLIDAY_SHORT') : '';
+        return `${it.rule} ${t('PAYRULE_FROM', { time: it.from })} ${hours}${min} ×${it.rate}${holiday}`;
+    }).join('；');
+}
+
+function payWarningText(warnings) {
+    const noRule = warnings.filter(w => w.code === 'NO_RULE').map(w => `${w.date.slice(5)} ${w.segment}`);
+    const long = warnings.filter(w => w.code === 'LONG').map(w => `${w.date.slice(5)} ${w.segment}`);
+    const parts = [];
+    if (noRule.length) parts.push(t('PAYRULE_WARN_NO_RULE', { list: noRule.join('、') }));
+    if (long.length) parts.push(t('PAYRULE_WARN_LONG', { list: long.join('、') }));
+    return parts.join(' ');
+}
+
+function initPayRules() {
+    if (payRulesStarted) return;
+    payRulesStarted = true;
+    document.getElementById('pr-employee').addEventListener('change', loadPayRules);
+    document.querySelectorAll('#pr-presets [data-preset]').forEach(btn => btn.addEventListener('click', () => {
+        const preset = PAY_PRESETS[btn.dataset.preset];
+        // 時薪預設沿用上一個時段的，少打一次字
+        const lastRate = payRules.length ? payRules[payRules.length - 1].rate : '';
+        payRules.push({ name: preset.nameKey ? t(preset.nameKey) : '', days: preset.days.slice(), start: preset.start, rate: lastRate, minHours: preset.minHours });
+        drawPayRules();
+    }));
+    document.getElementById('pr-save').addEventListener('click', savePayRules);
+    document.getElementById('pr-preview').addEventListener('click', () => {
+        const employeeId = document.getElementById('pr-employee').value;
+        switchRecordsTab('hours');
+        document.getElementById('hr-employee').value = employeeId;
+        loadMonthlyHours();
+    });
+}
+
+async function loadPayRules() {
+    const employeeId = document.getElementById('pr-employee').value;
+    const editor = document.getElementById('pr-editor');
+    if (!employeeId) { editor.classList.add('rec-hidden'); return; }
+    try {
+        const data = await apiRequestJson(`getShiftPayConfig&employeeId=${encodeURIComponent(employeeId)}`, ADMIN_READ);
+        if (!data.ok) { recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
+        const config = data.config || { rules: [], holidayMultiplier: 2, deductInsurance: true };
+        payRules = (config.rules || []).map(r => Object.assign({}, r, { days: r.days.slice() }));
+        document.getElementById('pr-holiday').value = config.holidayMultiplier || 2;
+        document.getElementById('pr-insurance').value = config.deductInsurance === false ? 'no' : 'yes';
+        const select = document.getElementById('pr-employee');
+        document.getElementById('pr-title').textContent = t('PAYRULE_EDIT_TITLE', { name: select.options[select.selectedIndex].textContent });
+        editor.classList.remove('rec-hidden');
+        drawPayRules();
+    } catch (error) {
+        console.error('載入計薪規則失敗:', error);
+        recMessage(loadFailedText(error), 'error');
+    }
+}
+
+function drawPayRules() {
+    const body = document.getElementById('pr-rules');
+    if (!payRules.length) {
+        body.innerHTML = `<tr><td colspan="6" class="rec-empty">${escapeHtml(t('PAYRULE_EMPTY'))}</td></tr>`;
+        return;
+    }
+    body.innerHTML = '';
+    payRules.forEach((rule, index) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input type="text" data-f="name" maxlength="20"></td>
+            <td><div class="days">${PAY_DAY_KEYS.map((k, i) => `<label><input type="checkbox" data-day="${i + 1}"${rule.days.includes(i + 1) ? ' checked' : ''}>${escapeHtml(t(k))}</label>`).join('')}</div></td>
+            <td><input type="time" data-f="start"></td>
+            <td><input type="number" data-f="rate" min="1" step="1"></td>
+            <td><input type="number" data-f="minHours" min="0" max="24" step="0.5"></td>
+            <td class="ops"><button type="button" class="rec-btn rec-btn-danger rec-btn-sm" data-del>${escapeHtml(t('BTN_DELETE'))}</button></td>`;
+        tr.querySelector('[data-f="name"]').value = rule.name;
+        tr.querySelector('[data-f="start"]').value = rule.start;
+        tr.querySelector('[data-f="rate"]').value = rule.rate;
+        tr.querySelector('[data-f="minHours"]').value = rule.minHours || 0;
+        tr.querySelectorAll('[data-f]').forEach(input => input.addEventListener('input', () => {
+            rule[input.dataset.f] = input.type === 'number' ? (input.value === '' ? '' : Number(input.value)) : input.value;
+        }));
+        tr.querySelectorAll('[data-day]').forEach(box => box.addEventListener('change', () => {
+            rule.days = [...tr.querySelectorAll('[data-day]')].filter(b => b.checked).map(b => Number(b.dataset.day));
+        }));
+        tr.querySelector('[data-del]').addEventListener('click', () => { payRules.splice(index, 1); drawPayRules(); });
+        body.appendChild(tr);
+    });
+}
+
+async function savePayRules() {
+    const employeeId = document.getElementById('pr-employee').value;
+    if (!employeeId) return;
+    const config = {
+        rules: payRules.map(r => ({ name: String(r.name || '').trim(), days: r.days, start: r.start, rate: Number(r.rate), minHours: Number(r.minHours) || 0 })),
+        holidayMultiplier: Number(document.getElementById('pr-holiday').value) || 2,
+        deductInsurance: document.getElementById('pr-insurance').value !== 'no'
+    };
+    await withButton(document.getElementById('pr-save'), async () => {
+        try {
+            const params = new URLSearchParams({ employeeId: employeeId, config: JSON.stringify(config) });
+            const data = await apiRequestJson(`saveShiftPayConfig&${params.toString()}`);
+            if (data.ok) {
+                recMessage(t(config.rules.length ? 'PAYRULE_SAVED' : 'PAYRULE_CLEARED'), 'success');
+                payRules = data.config.rules;
+                drawPayRules();
+            } else {
+                recMessage(data.msg || t('RECORDS_SAVE_FAILED'), 'error');
+            }
+        } catch (error) {
+            console.error('儲存計薪規則失敗:', error);
+            recMessage(t('RECORDS_SAVE_FAILED'), 'error');
+        }
+    });
 }

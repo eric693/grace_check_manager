@@ -1053,14 +1053,23 @@ function handleAdminMonthlyHours(params) {
     }
 
     const employees = ids.map(id => {
-      const days = (getEmployeeMonthlyAttendanceInternal(id, yearMonth) || []).map(d => ({
+      const attendance = getEmployeeMonthlyAttendanceInternal(id, yearMonth) || [];
+      // 有時段計薪規則的員工，一併算出每段薪資（跟薪資計算同一支，見 ShiftPay.gs）
+      const payConfig = (typeof readShiftPayConfig_ === 'function') ? readShiftPayConfig_(id) : null;
+      const pay = payConfig ? computeShiftPay_(id, yearMonth, payConfig, attendance) : null;
+      const payByDate = {};
+      if (pay) pay.days.forEach(d => { payByDate[d.date] = d; });
+      const days = attendance.map(d => ({
         date: d.date,
         segments: d.segments || [],
         punchIn: d.punchIn || '',
         punchOut: d.punchOut || '',
         hours: Number(d.workHours) || 0,
         unpaired: Number(d.unpaired) || 0,
-        adjusted: Number(d.adjustedCount) || 0
+        adjusted: Number(d.adjustedCount) || 0,
+        pay: payByDate[d.date] ? payByDate[d.date].pay : null,
+        holiday: payByDate[d.date] ? payByDate[d.date].holiday : false,
+        payItems: payByDate[d.date] ? payByDate[d.date].items : []
       }));
       const total = days.reduce((sum, d) => sum + d.hours, 0);
       return {
@@ -1069,7 +1078,11 @@ function handleAdminMonthlyHours(params) {
         days: days,
         totalHours: Math.round(total * 100) / 100,
         daysWorked: days.filter(d => d.hours > 0).length,
-        incompleteDays: days.filter(d => d.unpaired > 0).length
+        incompleteDays: days.filter(d => d.unpaired > 0).length,
+        // 時段計薪：月薪資（基本薪資部分）與要注意的地方
+        totalPay: pay ? pay.totalPay : null,
+        paidMinutes: pay ? pay.totalMinutes : null,
+        payWarnings: pay ? pay.warnings.filter(w => w.code !== 'UNPAIRED') : []
       };
     }).filter(e => params.employeeId || e.days.length);   // 全部時，沒有打卡的人不列
 
