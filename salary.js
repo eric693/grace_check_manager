@@ -2475,6 +2475,10 @@ function onBonusEmployeeSelect() {
     if (nameEl) nameEl.value = opt.dataset.name || '';
 }
 
+function isBonusAdmin() {
+    return (typeof currentUserRole !== 'undefined') && currentUserRole === 'admin';
+}
+
 async function loadBonusRecords() {
     const year = document.getElementById('bonus-year-filter')?.value || '';
     const loading = document.getElementById('bonus-loading');
@@ -2503,6 +2507,56 @@ async function loadBonusRecords() {
     }
 }
 
+/**
+ * 刪除一筆薪資資料（薪資設定／月薪資記錄／獎金記錄），刪完執行 after 重新整理畫面
+ */
+async function deleteSalaryRecord(kind, id, confirmText, after) {
+    if (!id || !confirm(confirmText)) return;
+    try {
+        const res = await callApifetch(`deleteSalaryRecord&kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`);
+        if (res.ok) {
+            showNotification(t('SALARY_DELETED'), 'success');
+            if (typeof after === 'function') after();
+        } else {
+            showNotification(res.msg || t('SALARY_DELETE_FAILED'), 'error');
+        }
+    } catch (error) {
+        console.error('刪除薪資資料失敗:', error);
+        showNotification(t('SALARY_DELETE_FAILED'), 'error');
+    }
+}
+
+/** 薪資設定表單的「刪除這位員工的薪資設定」 */
+function deleteSalaryConfig() {
+    const id = document.getElementById('config-employee-id')?.value;
+    const name = document.getElementById('config-employee-name')?.value || '';
+    deleteSalaryRecord('config', id, t('SALARY_CONFIG_DELETE_CONFIRM', { name: name }), () => {
+        const btn = document.getElementById('config-delete-btn');
+        if (btn) btn.style.display = 'none';
+        if (typeof onEmployeeSelect === 'function') onEmployeeSelect();   // 重新載入：變回空白表單
+    });
+}
+
+/** 獎金列表的「編輯」：把這筆帶回上面的表單，改完按儲存（同一人、同年度、同類型會覆蓋） */
+function editBonusRecord(bonus) {
+    const select = document.getElementById('bonus-employee-select');
+    if (select) {
+        select.value = String(bonus['員工ID'] || '');
+        if (typeof onBonusEmployeeSelect === 'function') onBonusEmployeeSelect();
+    }
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value === undefined || value === null ? '' : value; };
+    set('bonus-employee-id', bonus['員工ID']);
+    set('bonus-employee-name', bonus['員工姓名']);
+    set('bonus-type', bonus['獎金類型']);
+    set('bonus-year', bonus['年度']);
+    set('bonus-amount', bonus['發放金額']);
+    set('bonus-pay-date', bonus['發放日期']);
+    set('bonus-status', bonus['狀態']);
+    set('bonus-note', bonus['備註']);
+    document.getElementById('bonus-employee-select')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    showNotification(t('BONUS_EDIT_LOADED'), 'info');
+}
+
 function createBonusItem(bonus) {
     const div = document.createElement('div');
     div.className = 'feature-box flex justify-between items-center';
@@ -2521,7 +2575,15 @@ function createBonusItem(bonus) {
         '<div class="text-right">' +
             '<div class="text-2xl font-bold" style="color:var(--warning, #f59e0b);">' + formatCurrency(bonus['發放金額']) + '</div>' +
             '<div class="text-sm mt-1" style="color:' + statusColor + ';">' + escapeHtml(salaryValueLabel(bonus['狀態'] || '--')) + '</div>' +
+            (isBonusAdmin() ? '<div style="margin-top:8px; display:flex; gap:6px; justify-content:flex-end;">' +
+                '<button type="button" class="ghost-btn" data-edit-bonus>' + tHtml('BTN_EDIT') + '</button>' +
+                '<button type="button" class="danger-btn" data-delete-bonus>' + tHtml('BTN_DELETE') + '</button>' +
+            '</div>' : '') +
         '</div>';
+    div.querySelector('[data-edit-bonus]')?.addEventListener('click', () => editBonusRecord(bonus));
+    div.querySelector('[data-delete-bonus]')?.addEventListener('click', () => deleteSalaryRecord('bonus', bonus['發放ID'],
+        t('BONUS_DELETE_CONFIRM', { name: bonus['員工姓名'] || '', type: salaryValueLabel(bonus['獎金類型'] || ''), year: bonus['年度'] || '' }),
+        () => loadBonusRecords()));
     return div;
 }
 

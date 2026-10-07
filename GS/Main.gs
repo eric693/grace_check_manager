@@ -26,6 +26,7 @@ const ROUTE_ACCESS = {
   adminBrowseSheet: 'admin',
   adminMonthlyHours: 'admin',
   getShiftPayConfig: 'admin',
+  deleteSalaryRecord: 'admin',
   saveShiftPayConfig: 'admin',
   adminUpdateSheetRow: 'admin',
   adminAddSheetRow: 'admin',
@@ -95,7 +96,7 @@ const DEPLOY_CHECKS = [
                            typeof recentSamePunch_ === 'function' && PUNCH_MAX_PER_TYPE === 3],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
   ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminUpdateSheetRow === 'function' &&
-                           typeof handleAdminMonthlyHours === 'function'],
+                           typeof handleAdminMonthlyHours === 'function' && typeof handleDeleteSalaryRecord === 'function'],
   ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3 &&
                                String(calculateHourlySalary).indexOf('computeShiftPayForMonth_') !== -1],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
@@ -356,6 +357,8 @@ function doGet(e) {
         return respond1(handleAdminBrowseSheet(e.parameter));
       case "adminMonthlyHours":
         return respond1(handleAdminMonthlyHours(e.parameter));
+      case "deleteSalaryRecord":
+        return respond1(handleDeleteSalaryRecord(e.parameter));
       case "getShiftPayConfig":
         return respond1(handleGetShiftPayConfig(e.parameter));
       case "saveShiftPayConfig":

@@ -1093,3 +1093,59 @@ function handleAdminMonthlyHours(params) {
     return { ok: false, msg: '計算工時失敗：' + error.message };
   }
 }
+
+// ==================== 薪資資料刪除（薪資頁用） ====================
+//
+// 薪資設定、已存檔的月薪資、獎金記錄原本只能新增、修改，要刪只能進試算表。
+// 三種都用第一欄的 ID 找到那一列再刪：員工ID、薪資單ID（SAL-年月-員工ID）、發放ID。
+
+const SALARY_DELETE_KINDS = {
+  config: { sheet: () => SHEET_SALARY_CONFIG_ENHANCED, label: '薪資設定' },
+  monthly: { sheet: () => SHEET_MONTHLY_SALARY_ENHANCED, label: '月薪資記錄' },
+  bonus: { sheet: () => SHEET_BONUS_RECORDS, label: '獎金記錄' }
+};
+
+/** API：刪除一筆薪資資料。參數：kind（config／monthly／bonus）、id（第一欄的值） */
+function handleDeleteSalaryRecord(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const kind = SALARY_DELETE_KINDS[params.kind];
+    const id = String(params.id || '').trim();
+    if (!kind || !id) return { ok: false, code: 'RECORDS_INVALID', msg: '要刪除的資料不正確' };
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const sheet = SpreadsheetApp.getActive().getSheetByName(kind.sheet());
+      if (!sheet) return { ok: false, code: 'RECORDS_NOT_FOUND', msg: '找不到這筆資料' };
+      const values = sheet.getDataRange().getValues();
+      const headers = values[0] || [];
+      for (let i = values.length - 1; i >= 1; i--) {
+        if (String(values[i][0]).trim() !== id) continue;
+        const row = values[i];
+        sheet.deleteRow(i + 1);
+        // 管理操作記錄：寫是誰的、刪了什麼（帳號、身分證這類欄位不寫）
+        const tz = Session.getScriptTimeZone();
+        const pick = name => {
+          const c = headers.indexOf(name);
+          if (c === -1) return '';
+          const v = row[c];
+          return isDateValue_(v) ? Utilities.formatDate(v, tz, 'yyyy-MM-dd') : String(v);
+        };
+        params.employeeId = pick('員工ID');
+        params.employeeName = pick('員工姓名');
+        params.deleted = `${kind.label} ${id}` +
+          [pick('年月'), pick('獎金類型'), pick('年度'), pick('實發金額') && '實發 ' + pick('實發金額'), pick('發放金額') && '金額 ' + pick('發放金額'),
+           pick('薪資類型'), pick('基本薪資') && '基本薪資 ' + pick('基本薪資')].filter(Boolean).map(x => ' ' + x).join('');
+        return { ok: true };
+      }
+      return { ok: false, code: 'RECORDS_NOT_FOUND', msg: '找不到這筆資料，可能已經刪除了' };
+    } finally {
+      lock.releaseLock();
+    }
+  } catch (error) {
+    Logger.log(' handleDeleteSalaryRecord 錯誤: ' + error.message);
+    return { ok: false, msg: '刪除失敗：' + error.message };
+  }
+}

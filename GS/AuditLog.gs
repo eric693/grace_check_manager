@@ -216,6 +216,7 @@ const ADMIN_AUDIT_ACTIONS = {
   adminUpdateOvertime: '修改加班',
   adminCancelOvertime: '取消加班',
   saveShiftPayConfig: '修改計薪規則',
+  deleteSalaryRecord: '刪除薪資資料',
   adminAddSheetRow: '新增資料表資料',
   adminUpdateSheetRow: '修改資料表資料',
   adminDeleteSheetRow: '刪除資料表資料',

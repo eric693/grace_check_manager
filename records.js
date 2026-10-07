@@ -1113,6 +1113,7 @@ async function loadPayRules() {
         payRules = (config.rules || []).map(r => Object.assign({}, r, { days: r.days.slice() }));
         document.getElementById('pr-holiday').value = config.holidayMultiplier || 2;
         document.getElementById('pr-insurance').value = config.deductInsurance === false ? 'no' : 'yes';
+        document.getElementById('pr-overtime').value = config.overtimeExtra ? 'yes' : 'no';
         const select = document.getElementById('pr-employee');
         document.getElementById('pr-title').textContent = t('PAYRULE_EDIT_TITLE', { name: select.options[select.selectedIndex].textContent });
         editor.classList.remove('rec-hidden');
@@ -1160,7 +1161,8 @@ async function savePayRules() {
     const config = {
         rules: payRules.map(r => ({ name: String(r.name || '').trim(), days: r.days, start: r.start, rate: Number(r.rate), minHours: Number(r.minHours) || 0 })),
         holidayMultiplier: Number(document.getElementById('pr-holiday').value) || 2,
-        deductInsurance: document.getElementById('pr-insurance').value !== 'no'
+        deductInsurance: document.getElementById('pr-insurance').value !== 'no',
+        overtimeExtra: document.getElementById('pr-overtime').value === 'yes'
     };
     await withButton(document.getElementById('pr-save'), async () => {
         try {

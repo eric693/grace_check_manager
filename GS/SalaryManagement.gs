@@ -1486,7 +1486,10 @@ function calculateHourlySalary(employeeId, yearMonth) {
     }
     
     // 5. ⭐ 取得加班記錄
-    const overtimeRecords = getEmployeeMonthlyOvertime(employeeId, yearMonth);
+    // 時段計薪已經照實際打卡算到下班，加班的時間付過了；除非計薪規則設定「加班申請另計」，不再加發加班費
+    const skipOvertime = !!(shiftPay && shiftPay.config && !shiftPay.config.overtimeExtra);
+    const overtimeRecords = skipOvertime ? [] : getEmployeeMonthlyOvertime(employeeId, yearMonth);
+    if (skipOvertime) Logger.log(' 時段計薪：加班申請不另計加班費');
     Logger.log(` 找到 ${overtimeRecords.length} 筆加班記錄`);
     
     // 6. ⭐⭐⭐ 計算加班費（區分平日/休息日/例假日/國定假日）

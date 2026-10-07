@@ -9,6 +9,8 @@
 //          days：1 = 星期一 … 7 = 星期日；start：表定開始時間；minHours：保障時數（不到就照這個時數算，0 = 不保障）
 //   holidayMultiplier：國定假日時薪倍率（預設 2）
 //   deductInsurance：要不要扣勞健保（false = 有保但不扣）
+//   overtimeExtra：核准的「加班申請」要不要另外加發加班費（預設不要：時段計薪已經照實際打卡算到下班，
+//                  再發加班費等於同一段時間付兩次）
 //
 // 算法（每一段「上班卡 → 下班卡」）：
 //   1. 看上班卡時間，對應到當天適用的規則：開始時間最晚、而且上班卡不早於「開始時間前 60 分鐘」的那一條
@@ -20,7 +22,7 @@
 // 有設定規則的員工，薪資計算（calculateHourlySalary）的基本薪資就用這裡算的金額。
 
 const SHEET_SHIFT_PAY = '時段計薪設定';
-const SHIFT_PAY_HEADERS = ['員工ID', '員工姓名', '時段規則', '國定假日倍率', '扣勞健保', '更新時間', '更新者'];
+const SHIFT_PAY_HEADERS = ['員工ID', '員工姓名', '時段規則', '國定假日倍率', '扣勞健保', '更新時間', '更新者', '加班申請另計'];
 const SHIFT_PAY_EARLY_MINUTES = 60;    // 上班卡最多比表定早多久，還算是那個時段
 const SHIFT_PAY_LONG_SEGMENT_MINUTES = 6 * 60;   // 一段超過這麼久，可能是忘了打休息卡
 
@@ -32,6 +34,8 @@ function getShiftPaySheet_() {
     sheet.getRange(1, 1, 1, SHIFT_PAY_HEADERS.length).setValues([SHIFT_PAY_HEADERS])
          .setFontWeight('bold').setBackground('#1f4e79').setFontColor('#ffffff');
     sheet.setFrozenRows(1);
+  } else if (sheet.getRange(1, SHIFT_PAY_HEADERS.length).getValue() === '') {
+    sheet.getRange(1, SHIFT_PAY_HEADERS.length).setValue(SHIFT_PAY_HEADERS[SHIFT_PAY_HEADERS.length - 1]);
   }
   return sheet;
 }
@@ -60,7 +64,8 @@ function normalizeShiftPayConfig_(input) {
   });
   const multiplier = input && input.holidayMultiplier !== undefined && input.holidayMultiplier !== '' ? Number(input.holidayMultiplier) : 2;
   if (!isFinite(multiplier) || multiplier < 1 || multiplier > 5) throw new Error('國定假日倍率要在 1～5 之間');
-  return { rules: rules, holidayMultiplier: multiplier, deductInsurance: !(input && input.deductInsurance === false) };
+  return { rules: rules, holidayMultiplier: multiplier, deductInsurance: !(input && input.deductInsurance === false),
+           overtimeExtra: !!(input && input.overtimeExtra === true) };
 }
 
 /** 一位員工的時段計薪設定；沒設定（或沒有任何時段）回傳 null */
@@ -75,7 +80,8 @@ function readShiftPayConfig_(employeeId) {
       const config = normalizeShiftPayConfig_({
         rules: JSON.parse(values[i][2] || '[]'),
         holidayMultiplier: values[i][3],
-        deductInsurance: String(values[i][4]).trim() !== '否'
+        deductInsurance: String(values[i][4]).trim() !== '否',
+        overtimeExtra: String(values[i][7] || '').trim() === '是'
       });
       return config.rules.length ? config : null;
     } catch (error) {
@@ -175,7 +181,7 @@ function handleGetShiftPayConfig(params) {
     const admin = requireRecordsAdmin_(params.token);
     if (!admin.ok) return admin;
     const config = readShiftPayConfig_(params.employeeId);
-    return { ok: true, config: config || { rules: [], holidayMultiplier: 2, deductInsurance: true } };
+    return { ok: true, config: config || { rules: [], holidayMultiplier: 2, deductInsurance: true, overtimeExtra: false } };
   } catch (error) {
     return { ok: false, msg: '讀取計薪規則失敗：' + error.message };
   }
@@ -209,7 +215,7 @@ function handleSaveShiftPayConfig(params) {
         if (String(values[i][0]).trim() === emp.userId) { rowNumber = i + 1; break; }
       }
       const row = [emp.userId, emp.name, JSON.stringify(config.rules), config.holidayMultiplier,
-                   config.deductInsurance ? '是' : '否', new Date(), admin.user.name];
+                   config.deductInsurance ? '是' : '否', new Date(), admin.user.name, config.overtimeExtra ? '是' : '否'];
       if (rowNumber < 0) sheet.getRange(sheet.getLastRow() + 1, 1, 1, row.length).setValues([row]);
       else sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
     } finally {
@@ -218,7 +224,7 @@ function handleSaveShiftPayConfig(params) {
 
     params.employeeName = emp.name;
     params.changes = config.rules.map(r => `${r.name} ${r.start} 時薪${r.rate}${r.minHours ? ' 保障' + r.minHours + '小時' : ''}`).join('; ') +
-      `; 國定假日×${config.holidayMultiplier}; ${config.deductInsurance ? '扣' : '不扣'}勞健保`;
+      `; 國定假日×${config.holidayMultiplier}; ${config.deductInsurance ? '扣' : '不扣'}勞健保; 加班申請${config.overtimeExtra ? '另計' : '不另計'}`;
     params.config = '';
     return { ok: true, config: config };
   } catch (error) {
