@@ -492,17 +492,32 @@ function renderInsuranceBracketsEditor(brackets) {
   brackets.forEach(bracket => container.appendChild(buildBracketRow(bracket)));
 }
 
+/**
+ * 欄位外面包一層 label，附上欄位名稱。電腦上欄位名稱在表頭、這裡藏起來；
+ * 手機上表頭放不下而改成直排，就靠這個名稱看懂每一格要填什麼。
+ */
+function labeledRowCell(input, caption) {
+  const label = document.createElement('label');
+  label.className = 'row-cell';
+  const text = document.createElement('span');
+  text.className = 'row-cell-caption';
+  text.textContent = caption;
+  label.appendChild(text);
+  label.appendChild(input);
+  return label;
+}
+
 function buildBracketRow(bracket) {
   const row = document.createElement('div');
   row.className = 'item-row bracket-row';
 
   [
-    { field: 'min', value: bracket.min },
+    { field: 'min', value: bracket.min, caption: ta('BRACKET_MIN', '下限') },
     // 上限留白代表「以上」，所以 null 要轉成空字串而不是 0
-    { field: 'max', value: (bracket.max === null || bracket.max === undefined) ? '' : bracket.max },
-    { field: 'insured', value: bracket.insured },
-    { field: 'labor', value: bracket.labor },
-    { field: 'health', value: bracket.health }
+    { field: 'max', value: (bracket.max === null || bracket.max === undefined) ? '' : bracket.max, caption: ta('BRACKET_MAX', '上限') },
+    { field: 'insured', value: bracket.insured, caption: ta('BRACKET_INSURED', '投保薪資') },
+    { field: 'labor', value: bracket.labor, caption: ta('BRACKET_LABOR', '勞保費') },
+    { field: 'health', value: bracket.health, caption: ta('BRACKET_HEALTH', '健保費') }
   ].forEach(cell => {
     const input = document.createElement('input');
     input.type = 'number';
@@ -510,7 +525,7 @@ function buildBracketRow(bracket) {
     input.min = '0';
     input.step = '1';
     input.value = cell.value;
-    row.appendChild(input);
+    row.appendChild(labeledRowCell(input, cell.caption));
   });
 
   const remove = document.createElement('button');
@@ -555,12 +570,11 @@ function renderIncomeTaxEditor(rules) {
 function buildTaxBracketRow(bracket) {
   const row = document.createElement('div');
   row.className = 'item-row tax-row';
-  row.style.gridTemplateColumns = 'repeat(3, 1fr) auto';
 
   [
-    { field: 'min', value: bracket.min, step: '1' },
-    { field: 'rate', value: bracket.rate, step: '0.001' },
-    { field: 'base', value: bracket.base, step: '1' }
+    { field: 'min', value: bracket.min, step: '1', caption: ta('TAX_MIN', '級距下限') },
+    { field: 'rate', value: bracket.rate, step: '0.001', caption: ta('TAX_RATE', '稅率（0.05 = 5%）') },
+    { field: 'base', value: bracket.base, step: '1', caption: ta('TAX_BASE', '累計稅額') }
   ].forEach(cell => {
     const input = document.createElement('input');
     input.type = 'number';
@@ -568,7 +582,7 @@ function buildTaxBracketRow(bracket) {
     input.min = '0';
     input.step = cell.step;
     input.value = cell.value;
-    row.appendChild(input);
+    row.appendChild(labeledRowCell(input, cell.caption));
   });
 
   const remove = document.createElement('button');

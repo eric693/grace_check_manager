@@ -702,6 +702,9 @@
         .item-row.bracket-row { grid-template-columns: repeat(5, 1fr) auto; }
         .item-row.tax-header, .item-row.tax-row { grid-template-columns: repeat(3, 1fr) auto; }
 
+        .item-row .row-cell { display: block; min-width: 0; }
+        .item-row .row-cell-caption { display: none; }
+
         .item-row.tax-header, .item-row.bracket-row.summary-hint {
             margin-bottom: 4px;
             font-size: 0.75rem;
@@ -1049,6 +1052,18 @@
             .item-row.bracket-row,
             .item-row.tax-row { grid-template-columns: 1fr; }
             .item-row.tax-header, .item-row.bracket-row.summary-hint { display: none; }
+            /* 手機：表頭藏起來了，每一級改成一張卡片，每格上面標名稱 */
+            .item-row.bracket-row:not(.summary-hint),
+            .item-row.tax-row {
+                grid-template-columns: 1fr 1fr;
+                border: 1px solid var(--border);
+                border-radius: 10px;
+                padding: 10px;
+                margin-bottom: 12px;
+            }
+            .item-row .row-cell-caption { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px; }
+            .item-row.bracket-row .row-remove-btn,
+            .item-row.tax-row .row-remove-btn { grid-column: 1 / -1; }
         }
 
         @media (max-width: 640px) {
@@ -3076,9 +3091,13 @@
                     
                 } else {
                     console.log('ℹ 該員工尚無薪資設定，使用空白表單');
-                    // 清空所有欄位
-                    document.querySelectorAll('.form-input, .form-select').forEach(input => {
-                        if (!input.readOnly && input.id !== 'config-employee-id' && input.id !== 'config-employee-name') {
+                    // 清空薪資設定表單的欄位。只清這張表單，而且保留剛選的員工：
+                    // 以前清的是整頁所有欄位，連員工下拉選單也被清成空白，
+                    // 新員工（還沒有薪資設定）就一直被「請選取一個清單中的項目」擋住存不了
+                    const keep = ['config-employee-select', 'config-employee-id', 'config-employee-name'];
+                    const configForm = document.getElementById('config-employee-select')?.closest('form') || document;
+                    configForm.querySelectorAll('.form-input, .form-select').forEach(input => {
+                        if (!input.readOnly && !keep.includes(input.id)) {
                             input.value = '';
                         }
                     });
