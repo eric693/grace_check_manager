@@ -24,6 +24,7 @@ const ROUTE_ACCESS = {
   adminCancelOvertime: 'admin',
   adminListSheets: 'admin',
   adminBrowseSheet: 'admin',
+  adminMonthlyHours: 'admin',
   adminUpdateSheetRow: 'admin',
   adminAddSheetRow: 'admin',
   adminDeleteSheetRow: 'admin',
@@ -68,7 +69,8 @@ const DEPLOY_CHECKS = [
   ['Constants.gs', () => typeof getLeaveTypeInfo === 'function'],
   ['Dailysalary.gs', () => typeof calculateDailySalary === 'function'],
   ['DatabaseSetup.gs', () => typeof setupLeaveSystemDatabase === 'function'],
-  ['DbOperations.gs', () => typeof isEmployeeRowMisaligned_ === 'function' && typeof deleteLocation === 'function' && punch.length >= 6 && typeof writeSession_ === 'function' &&
+  ['DbOperations.gs', () => typeof isEmployeeRowMisaligned_ === 'function' && typeof deleteLocation === 'function' && punch.length >= 6 &&
+                            typeof checkSessionUncached_ === 'function' && typeof writeSession_ === 'function' &&
                             String(writeSession_).indexOf('createSessionForUser_') !== -1],
   ['EmployeeSheetRepair.gs', () => typeof readOriginalLockedNames_ === 'function'],
   ['Expense.gs', () => typeof handleReviewExpense === 'function'],
@@ -90,7 +92,8 @@ const DEPLOY_CHECKS = [
   ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function' &&
                            typeof recentSamePunch_ === 'function' && PUNCH_MAX_PER_TYPE === 3],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],
-  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminUpdateSheetRow === 'function'],
+  ['RecordsAdmin.gs', () => typeof handleAdminUpdatePunch === 'function' && typeof handleAdminUpdateSheetRow === 'function' &&
+                           typeof handleAdminMonthlyHours === 'function'],
   ['SalaryManagement.gs', () => typeof calculateMonthlySalary === 'function' && calculateMonthlySalary.length >= 3],
   ['SalaryTools.gs', () => typeof listPayableEmployees_ === 'function'],
   ['ShiftManagement.gs', () => typeof shiftRowBreakMinutes_ === 'function' && String(updateShift).indexOf('updateData.employeeId') !== -1],
@@ -347,6 +350,8 @@ function doGet(e) {
         return respond1(handleAdminListSheets(e.parameter));
       case "adminBrowseSheet":
         return respond1(handleAdminBrowseSheet(e.parameter));
+      case "adminMonthlyHours":
+        return respond1(handleAdminMonthlyHours(e.parameter));
       case "adminUpdateSheetRow":
         return respond1(handleAdminUpdateSheetRow(e.parameter));
       case "adminAddSheetRow":

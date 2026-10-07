@@ -19,6 +19,14 @@ const PUNCH_STATUS = {
     VIRTUAL: { key: 'RECORDS_STATUS_VIRTUAL', cls: 'rec-badge-bad' }
 };
 
+// 管理員讀資料（要讀整張表）：Google 慢的時候多等一下，失敗自動再試一次
+const ADMIN_READ = { allowRetry: true, timeoutMs: 45000 };
+
+/** 失敗訊息附上原因（逾時、伺服器錯誤頁…），截圖就看得出問題在哪 */
+function loadFailedText(error) {
+    return t('RECORDS_LOAD_FAILED') + (error && error.message ? '（' + error.message + '）' : '');
+}
+
 let employees = [];
 let punchRecords = [];
 let editingPunch = null;      // 正在修改的那一筆（新增模式是 null）
@@ -96,6 +104,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('otf-cancel').addEventListener('click', closeOvertimeForm);
     ['otf-start', 'otf-end'].forEach(id => document.getElementById(id).addEventListener('change', fillOvertimeHours));
     initSheetEditor();
+    document.getElementById('hr-month').value = today.slice(0, 7);
+    document.getElementById('hr-search').addEventListener('click', loadMonthlyHours);
+    document.getElementById('hr-download').addEventListener('click', downloadMonthlyHoursCsv);
+    document.getElementById('hr-print').addEventListener('click', () => window.print());
 
     await Promise.all([loadEmployeeOptions(), loadLocationOptions()]);
     loadPunches();
@@ -104,6 +116,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function switchRecordsTab(name) {
     document.querySelectorAll('.rec-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === name));
     document.querySelectorAll('.rec-panel').forEach(panel => panel.classList.toggle('active', panel.id === 'panel-' + name));
+    if (name === 'hours') loadMonthlyHours();
     if (name === 'leave') loadLeaveBalances();
     if (name === 'leaves') loadLeaves();
     if (name === 'overtime') loadOvertime();
@@ -112,7 +125,7 @@ function switchRecordsTab(name) {
 
 async function loadEmployeeOptions() {
     try {
-        const data = await apiRequestJson('getAllUsers');
+        const data = await apiRequestJson('getAllUsers', ADMIN_READ);
         employees = (data.ok ? data.users || [] : []).filter(u => u.userId && u.name);
     } catch (error) {
         employees = [];
@@ -129,7 +142,7 @@ async function loadEmployeeOptions() {
 
 async function loadLocationOptions() {
     try {
-        const data = await apiRequestJson('getLocations');
+        const data = await apiRequestJson('getLocations', ADMIN_READ);
         const select = document.getElementById('pf-location');
         (data.ok ? data.locations || [] : []).forEach(loc => select.add(new Option(loc.name, loc.name)));
     } catch (error) {
@@ -155,7 +168,7 @@ async function loadPunches() {
     await withButton(document.getElementById('punch-search-btn'), async () => {
         try {
             const query = new URLSearchParams({ startDate: start, endDate: end, employeeId }).toString();
-            const data = await apiRequestJson(`adminListPunches&${query}`);
+            const data = await apiRequestJson(`adminListPunches&${query}`, ADMIN_READ);
             if (!data.ok) {
                 body.innerHTML = '';
                 recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error');
@@ -166,7 +179,7 @@ async function loadPunches() {
         } catch (error) {
             console.error('載入打卡紀錄失敗:', error);
             body.innerHTML = '';
-            recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+            recMessage(loadFailedText(error), 'error');
         }
     });
 }
@@ -305,7 +318,7 @@ async function loadLeaveBalances() {
     const body = document.getElementById('leave-body');
     body.innerHTML = `<tr><td colspan="8" class="rec-empty">${escapeHtml(t('LOADING'))}</td></tr>`;
     try {
-        const data = await apiRequestJson('adminGetLeaveBalances');
+        const data = await apiRequestJson('adminGetLeaveBalances', ADMIN_READ);
         if (!data.ok) {
             body.innerHTML = '';
             recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error');
@@ -316,7 +329,7 @@ async function loadLeaveBalances() {
     } catch (error) {
         console.error('載入假期餘額失敗:', error);
         body.innerHTML = '';
-        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+        recMessage(loadFailedText(error), 'error');
     }
 }
 
@@ -440,7 +453,7 @@ async function loadLeaves() {
         status: document.getElementById('lv-status').value
     }).toString();
     try {
-        const data = await apiRequestJson(`adminListLeaves&${query}`);
+        const data = await apiRequestJson(`adminListLeaves&${query}`, ADMIN_READ);
         if (!data.ok) { body.innerHTML = ''; recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
         leaveRecords = data.records || [];
         document.getElementById('lv-summary').textContent = t('RECORDS_PUNCH_COUNT', { count: leaveRecords.length });
@@ -468,7 +481,7 @@ async function loadLeaves() {
     } catch (error) {
         console.error('載入請假紀錄失敗:', error);
         body.innerHTML = '';
-        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+        recMessage(loadFailedText(error), 'error');
     }
 }
 
@@ -509,7 +522,7 @@ async function loadOvertime() {
         status: document.getElementById('ot-status').value
     }).toString();
     try {
-        const data = await apiRequestJson(`adminListOvertime&${query}`);
+        const data = await apiRequestJson(`adminListOvertime&${query}`, ADMIN_READ);
         if (!data.ok) { body.innerHTML = ''; recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error'); return; }
         overtimeRecords = data.records || [];
         document.getElementById('ot-summary').textContent = t('RECORDS_PUNCH_COUNT', { count: overtimeRecords.length });
@@ -538,7 +551,7 @@ async function loadOvertime() {
     } catch (error) {
         console.error('載入加班紀錄失敗:', error);
         body.innerHTML = '';
-        recMessage(t('RECORDS_LOAD_FAILED'), 'error');
+        recMessage(loadFailedText(error), 'error');
     }
 }
 
@@ -683,7 +696,7 @@ async function loadSheetList() {
     select.innerHTML = `<option value="">${escapeHtml(t('LOADING'))}</option>`;
     showBrowseError('');
     try {
-        const data = await apiRequestJson('adminListSheets');
+        const data = await apiRequestJson('adminListSheets', ADMIN_READ);
         if (!data.ok) {
             select.innerHTML = '';
             showBrowseError(data.msg || t('RECORDS_LOAD_FAILED'));
@@ -704,7 +717,7 @@ async function loadSheetList() {
         console.error('載入工作表清單失敗:', error);
         select.innerHTML = '';
         // 留在畫面上，不只閃一下提示：選單空白時才知道為什麼
-        showBrowseError(t('RECORDS_LOAD_FAILED') + '（' + error.message + '）');
+        showBrowseError(loadFailedText(error));
     }
 }
 
@@ -734,7 +747,7 @@ async function browseSheet() {
             value: document.getElementById('br-value').value.trim(),
             page: browsePage
         }).toString();
-        const data = await apiRequestJson(`adminBrowseSheet&${query}`);
+        const data = await apiRequestJson(`adminBrowseSheet&${query}`, ADMIN_READ);
         if (!data.ok) {
             body.innerHTML = '';
             showBrowseError(data.msg || t('RECORDS_LOAD_FAILED'));
@@ -745,7 +758,7 @@ async function browseSheet() {
     } catch (error) {
         console.error('讀取工作表失敗:', error);
         body.innerHTML = '';
-        showBrowseError(t('RECORDS_LOAD_FAILED') + '（' + error.message + '）');
+        showBrowseError(loadFailedText(error));
     }
 }
 
@@ -893,7 +906,7 @@ async function deleteSheetRow(row, button) {
 async function loadSheetListKeepSelection(name) {
     const select = document.getElementById('br-sheet');
     try {
-        const data = await apiRequestJson('adminListSheets');
+        const data = await apiRequestJson('adminListSheets', ADMIN_READ);
         if (data.ok) {
             select.innerHTML = '';
             (data.sheets || []).forEach(sh => select.add(new Option(
@@ -923,6 +936,107 @@ function downloadBrowseCsv() {
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `${browseResult.name}_${todayStr()}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+// ==================== 工時明細（算薪水用） ====================
+
+let monthlyHours = null;
+const WEEKDAY_KEYS = ['WEEK_SUNDAY', 'WEEK_MONDAY', 'WEEK_TUESDAY', 'WEEK_WEDNESDAY', 'WEEK_THURSDAY', 'WEEK_FRIDAY', 'WEEK_SATURDAY'];
+
+function dayLabel(date) {
+    const d = new Date(date + 'T12:00:00');
+    return `${date.slice(5).replace('-', '/')}（${t(WEEKDAY_KEYS[d.getDay()])}）`;
+}
+
+function segmentText(day) {
+    if (day.segments && day.segments.length) return day.segments.map(s => `${s.start}–${s.end}`).join('、');
+    return `${day.punchIn || '--'}–${day.punchOut || '--'}`;
+}
+
+async function loadMonthlyHours() {
+    const month = document.getElementById('hr-month').value;
+    const box = document.getElementById('hr-result');
+    if (!month) { recMessage(t('RECORDS_PICK_MONTH'), 'error'); return; }
+    box.innerHTML = `<div class="rec-card"><div class="rec-empty">${escapeHtml(t('LOADING'))}</div></div>`;
+    await withButton(document.getElementById('hr-search'), async () => {
+        try {
+            const query = new URLSearchParams({ yearMonth: month, employeeId: document.getElementById('hr-employee').value }).toString();
+            const data = await apiRequestJson(`adminMonthlyHours&${query}`, ADMIN_READ);
+            if (!data.ok) {
+                box.innerHTML = '';
+                recMessage(data.msg || t('RECORDS_LOAD_FAILED'), 'error');
+                return;
+            }
+            monthlyHours = data;
+            renderMonthlyHours();
+        } catch (error) {
+            console.error('載入工時明細失敗:', error);
+            box.innerHTML = '';
+            recMessage(loadFailedText(error), 'error');
+        }
+    });
+}
+
+function renderMonthlyHours() {
+    const box = document.getElementById('hr-result');
+    const data = monthlyHours;
+    if (!data.employees.some(emp => emp.days.length)) {
+        box.innerHTML = `<div class="rec-card"><div class="rec-empty">${escapeHtml(t('RECORDS_HOURS_NONE'))}</div></div>`;
+        return;
+    }
+    box.innerHTML = data.employees.map(emp => `
+        <div class="rec-card">
+            <div class="rec-hours-head">
+                <h2>${escapeHtml(emp.name)}・${escapeHtml(data.yearMonth)}</h2>
+                <div class="rec-hours-total">${escapeHtml(t('RECORDS_HOURS_TOTAL_PREFIX'))}<strong>${escapeHtml(String(emp.totalHours))}</strong>${escapeHtml(t('RECORDS_HOURS_TOTAL_SUFFIX', { days: emp.daysWorked }))}</div>
+            </div>
+            ${emp.incompleteDays ? `<div class="rec-warning" style="margin:0 0 10px">${escapeHtml(t('RECORDS_HOURS_INCOMPLETE', { days: emp.incompleteDays }))}</div>` : ''}
+            <div class="rec-scroll">
+                <table class="rec-table">
+                    <thead><tr>
+                        <th>${escapeHtml(t('RECORDS_DATE'))}</th>
+                        <th>${escapeHtml(t('RECORDS_HOURS_SEGMENTS'))}</th>
+                        <th>${escapeHtml(t('RECORDS_HOURS'))}</th>
+                        <th>${escapeHtml(t('RECORDS_NOTE'))}</th>
+                    </tr></thead>
+                    <tbody>${emp.days.length ? emp.days.map(day => {
+                        const dow = new Date(day.date + 'T12:00:00').getDay();
+                        const notes = [];
+                        if (day.unpaired) notes.push(t('RECORDS_HOURS_UNPAIRED'));
+                        if (day.adjusted) notes.push(t('RECORDS_HOURS_ADJUSTED', { count: day.adjusted }));
+                        const cls = [day.unpaired ? 'rec-incomplete' : '', dow === 0 || dow === 6 ? 'rec-weekend' : ''].join(' ');
+                        return `<tr class="${cls}">
+                            <td>${escapeHtml(dayLabel(day.date))}</td>
+                            <td class="num" style="text-align:left">${escapeHtml(segmentText(day))}</td>
+                            <td class="num">${escapeHtml(day.hours.toFixed(2))}</td>
+                            <td>${escapeHtml(notes.join('；'))}</td>
+                        </tr>`;
+                    }).join('') : `<tr><td colspan="4" class="rec-empty">${escapeHtml(t('RECORDS_NO_DATA'))}</td></tr>`}</tbody>
+                </table>
+            </div>
+        </div>`).join('');
+}
+
+function downloadMonthlyHoursCsv() {
+    if (!monthlyHours || !monthlyHours.employees.length) {
+        recMessage(t('RECORDS_NO_DATA'), 'error');
+        return;
+    }
+    const cell = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [[t('SHIFT_EMPLOYEE_LABEL'), t('RECORDS_DATE'), t('RECORDS_HOURS_SEGMENTS'), t('RECORDS_HOURS'), t('RECORDS_NOTE')].map(cell).join(',')];
+    monthlyHours.employees.forEach(emp => {
+        emp.days.forEach(day => lines.push([emp.name, day.date, segmentText(day), day.hours.toFixed(2),
+            day.unpaired ? t('RECORDS_HOURS_UNPAIRED') : ''].map(cell).join(',')));
+        lines.push([emp.name, t('RECORDS_HOURS_TOTAL_LABEL'), '', emp.totalHours.toFixed(2), ''].map(cell).join(','));
+    });
+    const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `工時明細_${monthlyHours.yearMonth}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();

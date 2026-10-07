@@ -1024,3 +1024,59 @@ function handleAdminDeleteSheetRow(params) {
     return { ok: false, msg: '刪除失敗：' + error.message };
   }
 }
+
+// ==================== 工時明細（算薪水用） ====================
+//
+// 選月份，列出每位員工每天的上下班時段與工時、整月合計。
+// 工時用的是薪資計算同一支函式（getEmployeeMonthlyAttendanceInternal），兩邊的數字一定一樣。
+
+/**
+ * API：月工時明細
+ * 參數：yearMonth（yyyy-MM）、employeeId（可省略 = 全部在職員工）
+ */
+function handleAdminMonthlyHours(params) {
+  try {
+    const admin = requireRecordsAdmin_(params.token);
+    if (!admin.ok) return admin;
+    const yearMonth = String(params.yearMonth || '');
+    if (!/^\d{4}-\d{2}$/.test(yearMonth)) return { ok: false, code: 'RECORDS_DATE', msg: '請選擇月份' };
+
+    const nameMap = getEmployeeNameMap_();
+    let ids;
+    if (params.employeeId) {
+      ids = [String(params.employeeId).trim()];
+    } else {
+      const values = SpreadsheetApp.getActive().getSheetByName(SHEET_EMPLOYEES).getDataRange().getValues();
+      ids = values.slice(1)
+        .filter(r => String(r[0] || '').trim() && String(r[7] || '啟用').trim() === '啟用')
+        .map(r => String(r[0]).trim());
+    }
+
+    const employees = ids.map(id => {
+      const days = (getEmployeeMonthlyAttendanceInternal(id, yearMonth) || []).map(d => ({
+        date: d.date,
+        segments: d.segments || [],
+        punchIn: d.punchIn || '',
+        punchOut: d.punchOut || '',
+        hours: Number(d.workHours) || 0,
+        unpaired: Number(d.unpaired) || 0,
+        adjusted: Number(d.adjustedCount) || 0
+      }));
+      const total = days.reduce((sum, d) => sum + d.hours, 0);
+      return {
+        userId: id,
+        name: nameMap[id] || id,
+        days: days,
+        totalHours: Math.round(total * 100) / 100,
+        daysWorked: days.filter(d => d.hours > 0).length,
+        incompleteDays: days.filter(d => d.unpaired > 0).length
+      };
+    }).filter(e => params.employeeId || e.days.length);   // 全部時，沒有打卡的人不列
+
+    employees.sort((a, b) => a.name.localeCompare(b.name));
+    return { ok: true, yearMonth: yearMonth, employees: employees };
+  } catch (error) {
+    Logger.log(' handleAdminMonthlyHours 錯誤: ' + error.message);
+    return { ok: false, msg: '計算工時失敗：' + error.message };
+  }
+}

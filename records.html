@@ -73,6 +73,16 @@
         .rec-dialog-fields .rec-field span.rec-days { font-size: 12px; }
         html.dark .rec-dialog-box { background: #1f2937; }
         html.dark .rec-sheet-table td.ops { background: #1f2937; }
+        .rec-hours-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+        .rec-hours-total { font-size: 15px; color: #334155; }
+        .rec-hours-total strong { font-size: 22px; color: #1d4ed8; margin: 0 4px; }
+        .rec-table tr.rec-incomplete td { background: #fff7ed; }
+        .rec-table tr.rec-weekend td:first-child { color: #dc2626; }
+        @media print {
+            .rec-header button, .rec-intro, .rec-tabs, #panel-hours > .rec-card:first-child, .rec-message { display: none !important; }
+            .rec-card { box-shadow: none; break-inside: avoid; padding: 8px 0; }
+            body { background: #fff; }
+        }
         .rec-message { position: fixed; top: 16px; right: 16px; left: 16px; margin-left: auto; max-width: 420px; padding: 14px 18px; border-radius: 8px; color: #fff; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
         .rec-message.success { background: #2e7d32; }
         .rec-message.error { background: #c62828; }
@@ -106,6 +116,7 @@
         <div id="records-main" class="rec-hidden">
             <div class="rec-tabs">
                 <button type="button" class="rec-tab active" data-tab="punches" data-i18n="RECORDS_TAB_PUNCHES">打卡紀錄</button>
+                <button type="button" class="rec-tab" data-tab="hours" data-i18n="RECORDS_TAB_HOURS">工時明細</button>
                 <button type="button" class="rec-tab" data-tab="leave" data-i18n="RECORDS_TAB_LEAVE">假期餘額</button>
                 <button type="button" class="rec-tab" data-tab="leaves" data-i18n="RECORDS_TAB_LEAVES">請假紀錄</button>
                 <button type="button" class="rec-tab" data-tab="overtime" data-i18n="RECORDS_TAB_OVERTIME">加班紀錄</button>
@@ -195,6 +206,24 @@
                         </table>
                     </div>
                 </div>
+            </section>
+
+            <!-- 工時明細：算薪水用，跟薪資計算同一套工時 -->
+            <section id="panel-hours" class="rec-panel">
+                <div class="rec-card">
+                    <h2 data-i18n="RECORDS_HOURS_TITLE">工時明細</h2>
+                    <p class="rec-desc" data-i18n="RECORDS_HOURS_DESC">算薪水看這裡：每位員工每天的上下班時段與工時、整月合計。工時跟薪資計算用的是同一套算法（休息時段已扣除）。</p>
+                    <div class="rec-row">
+                        <div class="rec-field"><label for="hr-month" data-i18n="RECORDS_MONTH">月份</label><input type="month" id="hr-month"></div>
+                        <div class="rec-field"><label for="hr-employee" data-i18n="SHIFT_EMPLOYEE_LABEL">員工</label><select id="hr-employee" class="employee-filter"><option value="" data-i18n="OPTION_ALL">全部</option></select></div>
+                    </div>
+                    <div class="rec-actions">
+                        <button type="button" id="hr-search" class="rec-btn rec-btn-primary" data-i18n="RECORDS_SEARCH">查詢</button>
+                        <button type="button" id="hr-download" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_DOWNLOAD">下載 CSV</button>
+                        <button type="button" id="hr-print" class="rec-btn rec-btn-secondary" data-i18n="RECORDS_PRINT">列印</button>
+                    </div>
+                </div>
+                <div id="hr-result"></div>
             </section>
 
             <!-- 假期餘額 -->
