@@ -1569,7 +1569,7 @@
   "PAYROLL_SAVE_ADJUST": "Save and recalculate",
   "PAYROLL_SAVED": "Payslip updated",
   "PAYROLL_SAVE_FAILED": "Failed to update the payslip",
-  "PAYROLL_RULES_TITLE": "Payroll rules (attendance bonus, meal pay, birthday gift)",
+  "PAYROLL_RULES_TITLE": "Payroll rules (meal pay, birthday gift)",
   "PAYROLL_RULES_DESC": "\"Monthly\" rules apply to staff whose salary type is monthly, \"hourly\" rules to staff whose salary type is hourly, whether full-time or part-time. If you do not want these automatic extras, untick \"Enabled\" above. Overtime for monthly pay uses (base + meal + position allowance) ÷ 30 ÷ 8, with multipliers set under Overtime rates below. Changes apply to newly calculated pay.",
   "SALARY_CONFIG_DELETE": "Delete this employee's salary settings",
   "SALARY_CONFIG_DELETE_CONFIRM": "Delete the salary settings for {name}? Saved payslips are not deleted.",

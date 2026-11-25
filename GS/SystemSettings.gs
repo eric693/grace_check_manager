@@ -296,21 +296,12 @@ const DEFAULT_INCOME_TAX_RULES = {
 /**
  * 驗證所得稅設定
  */
-// ==================== 計薪規則（全勤、餐費、生日禮金） ====================
+// ==================== 計薪規則（餐費、生日禮金） ====================
 //
 // 店家自己的計薪規則，金額與門檻都可以在薪資頁的「薪資規則」調整，見 PayrollRules.gs。
 // 正職 = 薪資類型「月薪」，兼職 = 「時薪」。
 const DEFAULT_PAYROLL_RULES = {
   enabled: true,
-  // 正職全勤：每月可以有 lateGraceTimes 次、每次 lateGraceMinutes 分鐘內的遲到；
-  // 忘記打卡（補打卡或缺卡）最多 maxMissedPunches 次
-  fullTimeAttendanceBonus: 2000,
-  lateGraceMinutes: 5,
-  lateGraceTimes: 1,
-  maxMissedPunches: 2,
-  // 兼職全勤：當月排班時數達 partTimeAttendanceHours
-  partTimeAttendanceBonus: 1000,
-  partTimeAttendanceHours: 96,
   // 餐費：一天工作（正職看實際工時、兼職看排班）滿 mealMinHours 小時，加發 mealPerDay
   mealPerDay: 110,
   mealMinHours: 8,
@@ -324,8 +315,6 @@ function validatePayrollRules_(input) {
   if (!input || typeof input !== 'object') return { ok: false, msg: '計薪規則格式錯誤' };
   const rules = { enabled: input.enabled !== false };
   const limits = {
-    fullTimeAttendanceBonus: [0, 100000], lateGraceMinutes: [0, 120], lateGraceTimes: [0, 31],
-    maxMissedPunches: [0, 62], partTimeAttendanceBonus: [0, 100000], partTimeAttendanceHours: [0, 400],
     mealPerDay: [0, 10000], mealMinHours: [0, 24], fullTimeBirthdayGift: [0, 100000],
     partTimeBirthdayGift: [0, 100000], birthdayMinTenureMonths: [0, 120]
   };

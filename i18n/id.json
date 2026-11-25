@@ -1548,7 +1548,7 @@
   "PAYROLL_SAVE_ADJUST": "Simpan dan hitung ulang",
   "PAYROLL_SAVED": "Slip gaji diperbarui",
   "PAYROLL_SAVE_FAILED": "Gagal memperbarui slip gaji",
-  "PAYROLL_RULES_TITLE": "Aturan gaji (bonus kehadiran, uang makan, hadiah ulang tahun)",
+  "PAYROLL_RULES_TITLE": "Aturan gaji (uang makan, hadiah ulang tahun)",
   "PAYROLL_RULES_DESC": "Aturan \"bulanan\" berlaku untuk karyawan dengan jenis gaji bulanan, aturan \"per jam\" untuk karyawan per jam, tidak terkait tetap atau paruh waktu. Jika tidak perlu tambahan otomatis ini, hapus centang \"Aktif\" di atas. Upah lembur gaji bulanan = (gaji pokok + uang makan + tunjangan jabatan) ÷ 30 ÷ 8, pengali diatur di Tarif lembur di bawah. Perubahan berlaku untuk gaji yang dihitung baru.",
   "SALARY_CONFIG_DELETE": "Hapus pengaturan gaji karyawan ini",
   "SALARY_CONFIG_DELETE_CONFIRM": "Hapus pengaturan gaji {name}? Slip gaji yang sudah disimpan tidak ikut terhapus.",

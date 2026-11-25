@@ -1588,7 +1588,7 @@
   "PAYROLL_SAVE_ADJUST": "儲存並重新計算",
   "PAYROLL_SAVED": "薪資單已更新",
   "PAYROLL_SAVE_FAILED": "薪資單更新失敗",
-  "PAYROLL_RULES_TITLE": "計薪規則（全勤、餐費、生日禮金）",
+  "PAYROLL_RULES_TITLE": "計薪規則（餐費、生日禮金）",
   "PAYROLL_RULES_DESC": "「月薪制」的規則套用在薪資類型為月薪的員工，「時薪制」的規則套用在薪資類型為時薪的員工，跟正職、兼職無關。不需要這些自動加發的項目，就把上面的「啟用」取消勾選。月薪的加班費時薪以（基本薪資＋伙食費＋職務加給）÷ 30 ÷ 8 計算，倍率在下方「加班倍率」設定。改動後新計算的薪資才會套用。",
   "SALARY_CONFIG_DELETE": "刪除這位員工的薪資設定",
   "SALARY_CONFIG_DELETE_CONFIRM": "確定要刪除 {name} 的薪資設定嗎？已經存檔的薪資單不會被刪除。",

@@ -1604,7 +1604,7 @@
   "PAYROLL_SAVE_ADJUST": "Lưu và tính lại",
   "PAYROLL_SAVED": "Đã cập nhật phiếu lương",
   "PAYROLL_SAVE_FAILED": "Cập nhật phiếu lương thất bại",
-  "PAYROLL_RULES_TITLE": "Quy tắc lương (chuyên cần, tiền ăn, quà sinh nhật)",
+  "PAYROLL_RULES_TITLE": "Quy tắc lương (tiền ăn, quà sinh nhật)",
   "PAYROLL_RULES_DESC": "Quy tắc \"lương tháng\" áp dụng cho nhân viên có loại lương là tháng, quy tắc \"lương giờ\" cho nhân viên lương giờ, không phụ thuộc toàn thời gian hay bán thời gian. Không cần các khoản tự động này thì bỏ chọn \"Bật\" ở trên. Lương giờ tăng ca của lương tháng = (lương cơ bản + tiền ăn + phụ cấp chức vụ) ÷ 30 ÷ 8, hệ số đặt ở mục Hệ số tăng ca bên dưới. Thay đổi áp dụng cho lương tính mới.",
   "SALARY_CONFIG_DELETE": "Xóa cài đặt lương của nhân viên này",
   "SALARY_CONFIG_DELETE_CONFIRM": "Xóa cài đặt lương của {name}? Phiếu lương đã lưu không bị xóa.",

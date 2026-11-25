@@ -1242,10 +1242,6 @@
                                         <span id="detail-transport-allowance" class="font-mono">NT$ 0</span>
                                     </div>
                                     <div class="flex justify-between">
-                                        <span data-i18n="SALARY_ATTENDANCE_BONUS">全勤獎金</span>
-                                        <span id="detail-attendance-bonus" class="font-mono">NT$ 0</span>
-                                    </div>
-                                    <div class="flex justify-between">
                                         <span data-i18n="SALARY_PERFORMANCE_BONUS">業績獎金</span>
                                         <span id="detail-performance-bonus" class="font-mono">NT$ 0</span>
                                     </div>
@@ -1460,8 +1456,8 @@
 
                     <hr class="section-divider">
 
-                    <!-- 計薪規則：全勤、餐費、生日禮金 -->
-                    <h3 class="text-lg font-semibold mb-2" data-i18n="PAYROLL_RULES_TITLE">計薪規則（全勤、餐費、生日禮金）</h3>
+                    <!-- 計薪規則：餐費、生日禮金 -->
+                    <h3 class="text-lg font-semibold mb-2" data-i18n="PAYROLL_RULES_TITLE">計薪規則（餐費、生日禮金）</h3>
                     <p class="summary-hint mb-4" data-i18n="PAYROLL_RULES_DESC">
                         「月薪制」的規則套用在薪資類型為月薪的員工，「時薪制」的規則套用在薪資類型為時薪的員工，跟正職、兼職無關。不需要這些自動加發的項目，就把上面的「啟用」取消勾選。月薪的加班費時薪以（基本薪資＋伙食費＋職務加給）÷ 30 ÷ 8 計算，倍率在下方「加班倍率」設定。改動後新計算的薪資才會套用。
                     </p>
@@ -1625,14 +1621,6 @@
                                 <input type="number" id="config-transport-allowance" class="form-input" 
                                     value="0" min="0" step="1" placeholder="0">
                                 <span class="form-hint" data-i18n="HINT_TRANSPORT_ALLOWANCE">每月交通津貼或油錢補助</span>
-                            </div>
-                            
-                            <!-- 全勤獎金 -->
-                            <div class="form-group">
-                                <label class="form-label" data-i18n="SALARY_ATTENDANCE_BONUS_LABEL">全勤獎金</label>
-                                <input type="number" id="config-attendance-bonus" class="form-input" 
-                                    value="0" min="0" step="1" placeholder="0">
-                                <span class="form-hint" data-i18n="HINT_ATTENDANCE_BONUS">未請假可領取（系統自動判斷）</span>
                             </div>
                             
                             <!-- 業績獎金 -->
@@ -2362,7 +2350,7 @@
             const positionAllowance = parseFloat(document.getElementById('config-position-allowance').value) || 0;
             const mealAllowance = parseFloat(document.getElementById('config-meal-allowance').value) || 0;
             const transportAllowance = parseFloat(document.getElementById('config-transport-allowance').value) || 0;
-            const attendanceBonus = parseFloat(document.getElementById('config-attendance-bonus').value) || 0;
+            const attendanceBonus = 0;   // 全勤獎金已取消
             const performanceBonus = parseFloat(document.getElementById('config-performance-bonus').value) || 0;
             const otherAllowances = parseFloat(document.getElementById('config-other-allowances').value) || 0;
             
@@ -2946,7 +2934,6 @@
                 'config-position-allowance',
                 'config-meal-allowance',
                 'config-transport-allowance',
-                'config-attendance-bonus',
                 'config-performance-bonus',
                 'config-other-allowances',
                 
@@ -3028,7 +3015,6 @@
                         'config-position-allowance',
                         'config-meal-allowance',
                         'config-transport-allowance',
-                        'config-attendance-bonus',
                         'config-performance-bonus',
                         'config-other-allowances'
                     ];
@@ -3037,7 +3023,6 @@
                         'positionAllowance',
                         'mealAllowance',
                         'transportAllowance',
-                        'attendanceBonus',
                         'performanceBonus',
                         'otherAllowances'
                     ];
@@ -3254,7 +3239,7 @@
                 const positionAllowance = parseFloat(document.getElementById('config-position-allowance').value) || 0;
                 const mealAllowance = parseFloat(document.getElementById('config-meal-allowance').value) || 0;
                 const transportAllowance = parseFloat(document.getElementById('config-transport-allowance').value) || 0;
-                const attendanceBonus = parseFloat(document.getElementById('config-attendance-bonus').value) || 0;
+                const attendanceBonus = 0;   // 全勤獎金已取消
                 const performanceBonus = parseFloat(document.getElementById('config-performance-bonus').value) || 0;
                 const otherAllowances = parseFloat(document.getElementById('config-other-allowances').value) || 0;
                 

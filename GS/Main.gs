@@ -93,7 +93,7 @@ const DEPLOY_CHECKS = [
                            typeof bindLineAccount_ === 'function'],
   ['Offboarding.gs', () => typeof handleOffboardEmployee === 'function'],
   ['OvertimeOperations.gs', () => typeof initOvertimeSheet === 'function'],
-  ['PayrollRules.gs', () => typeof applyPayrollRules_ === 'function' && typeof payrollAttendanceZh_ === 'function'],
+  ['PayrollRules.gs', () => typeof applyPayrollRules_ === 'function'],
   ['PunchRules.gs', () => typeof checkPunchSequence_ === 'function' && typeof computeDayWorkFromPunches_ === 'function' &&
                            typeof recentSamePunch_ === 'function' && PUNCH_MAX_PER_TYPE === 3],
   ['QrPunch.gs', () => typeof qrPunch === 'function' && String(qrPunch).indexOf('checkPunchSequence_') !== -1],

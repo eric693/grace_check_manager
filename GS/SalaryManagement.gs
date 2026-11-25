@@ -512,7 +512,7 @@ function setEmployeeSalaryTW(salaryData) {
       toNumber(salaryData.positionAllowance) || 0,     // G: 職務加給
       toNumber(salaryData.mealAllowance) || 0,         // H: 伙食費
       toNumber(salaryData.transportAllowance) || 0,    // I: 交通補助
-      toNumber(salaryData.attendanceBonus) || 0,       // J: 全勤獎金
+      0,                                               // J: 全勤獎金（已取消，固定 0）
       toNumber(salaryData.performanceBonus) || 0,      // K: 業績獎金
       toNumber(salaryData.otherAllowances) || 0,       // L: 其他津貼
       
@@ -654,7 +654,6 @@ function syncSalaryToMonthlyRecord(employeeId, yearMonth) {
         (parseFloat(config['職務加給']) || 0) +
         (parseFloat(config['伙食費']) || 0) +
         (parseFloat(config['交通補助']) || 0) +
-        (parseFloat(config['全勤獎金']) || 0) +
         (parseFloat(config['業績獎金']) || 0) +
         (parseFloat(config['其他津貼']) || 0);
       
@@ -688,7 +687,7 @@ function syncSalaryToMonthlyRecord(employeeId, yearMonth) {
         positionAllowance: config['職務加給'] || 0,
         mealAllowance: config['伙食費'] || 0,
         transportAllowance: config['交通補助'] || 0,
-        attendanceBonus: config['全勤獎金'] || 0,
+        attendanceBonus: 0,   // 全勤獎金已取消
         performanceBonus: config['業績獎金'] || 0,
         otherAllowances: config['其他津貼'] || 0,
         weekdayOvertimePay: 0,
@@ -1020,7 +1019,7 @@ function saveMonthlySalaryAPI() {
       positionAllowance: parseFloat(getParam('positionAllowance')) || 0,
       mealAllowance: parseFloat(getParam('mealAllowance')) || 0,
       transportAllowance: parseFloat(getParam('transportAllowance')) || 0,
-      attendanceBonus: parseFloat(getParam('attendanceBonus')) || 0,
+      attendanceBonus: 0,   // 全勤獎金已取消
       performanceBonus: parseFloat(getParam('performanceBonus')) || 0,
       otherAllowances: parseFloat(getParam('otherAllowances')) || 0,
       
@@ -1592,7 +1591,7 @@ function calculateHourlySalary(employeeId, yearMonth) {
     const positionAllowance = parseFloat(config['職務加給']) || 0;
     const mealAllowance = parseFloat(config['伙食費']) || 0;
     const transportAllowance = parseFloat(config['交通補助']) || 0;
-    let attendanceBonus = parseFloat(config['全勤獎金']) || 0;
+    const attendanceBonus = 0;   // 全勤獎金已取消
     const performanceBonus = parseFloat(config['業績獎金']) || 0;
     const otherAllowances = parseFloat(config['其他津貼']) || 0;
     
@@ -1600,7 +1599,6 @@ function calculateHourlySalary(employeeId, yearMonth) {
     if (positionAllowance > 0) Logger.log(`   - 職務加給: $${positionAllowance}`);
     if (mealAllowance > 0) Logger.log(`   - 伙食費: $${mealAllowance}`);
     if (transportAllowance > 0) Logger.log(`   - 交通補助: $${transportAllowance}`);
-    if (attendanceBonus > 0) Logger.log(`   - 全勤獎金: $${attendanceBonus}`);
     if (performanceBonus > 0) Logger.log(`   - 業績獎金: $${performanceBonus}`);
     if (otherAllowances > 0) Logger.log(`   - 其他津貼: $${otherAllowances}`);
     
@@ -1655,11 +1653,6 @@ function calculateHourlySalary(employeeId, yearMonth) {
       Logger.log(`   事假: ${personalLeaveHours} 小時，扣款 $${personalLeaveDeduction} (全薪)`);
       Logger.log(`   合計扣款: $${leaveDeduction}`);
       
-      // ⭐ 如果有請假，取消全勤獎金
-      if (leaveDeduction > 0) {
-        attendanceBonus = 0;
-        Logger.log(` 有請假記錄，取消全勤獎金`);
-      }
     } else {
       Logger.log(` 無請假記錄`);
     }
@@ -2147,7 +2140,7 @@ function calculateMonthlySalary(employeeId, yearMonth, payrollAdjustments) {
       result = calculateMonthlySalaryInternal(employeeId, yearMonth);
     }
     
-    // 3. 店家的計薪規則：全勤、餐費、生日禮金、銷售獎金、預支、手動項目（PayrollRules.gs）
+    // 3. 店家的計薪規則：餐費、生日禮金、銷售獎金、預支、手動項目（PayrollRules.gs）
     if (result && result.success && result.data && typeof applyPayrollRules_ === 'function') {
       applyPayrollRules_(result.data, config, payrollAdjustments);
     }
@@ -2199,7 +2192,7 @@ function calculateMonthlySalaryInternal(employeeId, yearMonth) {
     
     Logger.log(` 基本薪資: ${baseSalary}, 時薪: ${hourlyRate}, 加班費時薪: ${overtimeHourlyRate}`);
     const transportAllowance = parseFloat(config['交通補助']) || 0;
-    let attendanceBonus = parseFloat(config['全勤獎金']) || 0;
+    const attendanceBonus = 0;   // 全勤獎金已取消
     const performanceBonus = parseFloat(config['業績獎金']) || 0;
     const otherAllowances = parseFloat(config['其他津貼']) || 0;
     
@@ -2207,7 +2200,6 @@ function calculateMonthlySalaryInternal(employeeId, yearMonth) {
     if (positionAllowance > 0) Logger.log(`   - 職務加給: $${positionAllowance}`);
     if (mealAllowance > 0) Logger.log(`   - 伙食費: $${mealAllowance}`);
     if (transportAllowance > 0) Logger.log(`   - 交通補助: $${transportAllowance}`);
-    if (attendanceBonus > 0) Logger.log(`   - 全勤獎金: $${attendanceBonus}`);
     if (performanceBonus > 0) Logger.log(`   - 業績獎金: $${performanceBonus}`);
     if (otherAllowances > 0) Logger.log(`   - 其他津貼: $${otherAllowances}`);
     
@@ -2434,11 +2426,6 @@ function calculateMonthlySalaryInternal(employeeId, yearMonth) {
       Logger.log(`   事假: ${personalLeaveHours} 小時，扣款 $${personalLeaveDeduction} (全薪)`);
       Logger.log(`   合計扣款: $${leaveDeduction}`);
       
-      // 如果有請假，取消全勤獎金
-      if (leaveDeduction > 0) {
-        attendanceBonus = 0;
-        Logger.log(` 有請假記錄，取消全勤獎金`);
-      }
     } else {
       Logger.log(`\n 請假扣款統計:`);
       Logger.log(`   病假: 0 小時，扣款 $0 (半薪)`);
@@ -3334,7 +3321,7 @@ function calculateWeeklySalary(employeeId, yearMonth) {
     const positionAllowance  = parseFloat(config['職務加給'])  || 0;
     const mealAllowance      = parseFloat(config['伙食費'])    || 0;
     const transportAllowance = parseFloat(config['交通補助'])  || 0;
-    var attendanceBonus      = parseFloat(config['全勤獎金'])  || 0;
+    const attendanceBonus      = 0;   // 全勤獎金已取消
     const performanceBonus   = parseFloat(config['業績獎金'])  || 0;
     const otherAllowances    = parseFloat(config['其他津貼'])  || 0;
 
@@ -3380,7 +3367,6 @@ function calculateWeeklySalary(employeeId, yearMonth) {
         }
       });
       leaveDeduction = sickLeaveDeduction + personalLeaveDeduction;
-      if (leaveDeduction > 0) attendanceBonus = 0;
     }
 
     const grossSalary = Math.round(basePay + positionAllowance + mealAllowance +

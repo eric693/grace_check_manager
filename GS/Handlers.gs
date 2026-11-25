@@ -1095,7 +1095,7 @@ function handleSetEmployeeSalaryTW(params) {
       positionAllowance: safeNumber(params.positionAllowance),
       mealAllowance: safeNumber(params.mealAllowance),
       transportAllowance: safeNumber(params.transportAllowance),
-      attendanceBonus: safeNumber(params.attendanceBonus),
+      attendanceBonus: 0,   // 全勤獎金已取消
       performanceBonus: safeNumber(params.performanceBonus),
       otherAllowances: safeNumber(params.otherAllowances),
       

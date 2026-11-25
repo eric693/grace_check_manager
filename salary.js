@@ -561,7 +561,7 @@ function renderPayslipAcknowledgement(data) {
 
 /**
  * 員工薪資頁：計薪規則的項目（餐費、生日禮金、銷售獎金、手動加項）接在應發項目後面，
- * 預支與手動減項接在扣款後面，全勤說明與備註放在最下面。每次重畫前先清掉上一次的。
+ * 預支與手動減項接在扣款後面，備註放在最下面。每次重畫前先清掉上一次的。
  */
 function renderEmployeePayrollItems(data) {
     document.querySelectorAll('.payroll-rule-item').forEach(el => el.remove());
@@ -590,7 +590,7 @@ function renderEmployeePayrollItems(data) {
     const bank = document.getElementById('detail-bank-name');
     const host = bank && bank.closest('.bank-info') ? bank.closest('.bank-info').parentElement : null;
     if (!host) return;
-    [[t('PAYROLL_ATTENDANCE_NOTE'), items.attendanceNote], [t('PAYROLL_PAYSLIP_NOTE'), items.note]]
+    [[t('PAYROLL_PAYSLIP_NOTE'), items.note]]
         .filter(([, text]) => text)
         .forEach(([label, text]) => {
             const p = document.createElement('p');
@@ -723,7 +723,6 @@ function displayEmployeeSalary(data) {
     safeSet('detail-position-allowance', formatCurrency(data.positionAllowance || 0));
     safeSet('detail-meal-allowance', formatCurrency(data.mealAllowance || 0));
     safeSet('detail-transport-allowance', formatCurrency(data.transportAllowance || 0));
-    safeSet('detail-attendance-bonus', formatCurrency(data.attendanceBonus || 0));
     safeSet('detail-performance-bonus', formatCurrency(data.performanceBonus || 0));
     
     //  自訂津貼／扣款：項目由管理員定義，所以只能動態長出來
@@ -1010,7 +1009,6 @@ async function handleSalaryConfigSubmit(e) {
     const positionAllowance = toNumber(safeGetValue('config-position-allowance'));  //  改這裡
     const mealAllowance = toNumber(safeGetValue('config-meal-allowance'));          //  改這裡
     const transportAllowance = toNumber(safeGetValue('config-transport-allowance'));//  改這裡
-    const attendanceBonus = toNumber(safeGetValue('config-attendance-bonus'));      //  改這裡
     const performanceBonus = toNumber(safeGetValue('config-performance-bonus'));    //  改這裡
     const otherAllowances = toNumber(safeGetValue('config-other-allowances'));      //  改這裡
 
@@ -1064,7 +1062,6 @@ async function handleSalaryConfigSubmit(e) {
             `&positionAllowance=${encodeURIComponent(positionAllowance)}` +
             `&mealAllowance=${encodeURIComponent(mealAllowance)}` +
             `&transportAllowance=${encodeURIComponent(transportAllowance)}` +
-            `&attendanceBonus=${encodeURIComponent(attendanceBonus)}` +
             `&performanceBonus=${encodeURIComponent(performanceBonus)}` +
             `&otherAllowances=${encodeURIComponent(otherAllowances)}` +
             
@@ -1109,7 +1106,6 @@ async function handleSalaryConfigSubmit(e) {
                 'config-position-allowance',
                 'config-meal-allowance',
                 'config-transport-allowance',
-                'config-attendance-bonus',
                 'config-performance-bonus',
                 'config-other-allowances',
                 'config-welfare-fee',
@@ -1375,11 +1371,11 @@ function displaySalaryCalculation(data, container) {
                         <span>${tHtml('SALARY_TRANSPORT_ALLOWANCE')}</span>
                         <span class="font-mono">${formatCurrency(data.transportAllowance || 0)}</span>
                     </div>
+                    ${(parseFloat(data.attendanceBonus) || 0) ? `
                     <div class="calculation-row">
                         <span>${tHtml('SALARY_ATTENDANCE_BONUS')}</span>
-                        <span class="font-mono">${formatCurrency(data.attendanceBonus || 0)}</span>
-                    </div>
-                    ${ruleItems.attendanceNote ? `<p class="text-xs text-gray-500 dark:text-gray-400 mb-1">${escapeHtml(ruleItems.attendanceNote)}</p>` : ''}
+                        <span class="font-mono">${formatCurrency(data.attendanceBonus)}</span>
+                    </div>` : ''}
                     <div class="calculation-row">
                         <span>${tHtml('SALARY_PERFORMANCE_BONUS')}</span>
                         <span class="font-mono">${formatCurrency(data.performanceBonus || 0)}</span>
@@ -1528,7 +1524,7 @@ function payrollCalcRowsHtml(items) {
 }
 
 /**
- * 計薪調整：每張薪資單各自填的銷售獎金、預支抵扣、全勤（手動）、手動加減項目、備註。
+ * 計薪調整：每張薪資單各自填的銷售獎金、預支抵扣、手動加減項目、備註。
  * 按儲存後由後端用這些值重算並存檔，之後重算（包括員工自己打開薪資單）都會沿用。
  */
 function renderPayrollAdjustPanel(data, panel, container) {
@@ -1540,7 +1536,7 @@ function renderPayrollAdjustPanel(data, panel, container) {
         <div class="p-4 rounded-lg border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/20">
             <h4 class="font-semibold mb-1 text-indigo-800 dark:text-indigo-300">${tHtml('PAYROLL_ADJUST_TITLE')}</h4>
             <p class="text-xs text-indigo-700 dark:text-indigo-300 mb-3">${tHtml('PAYROLL_ADJUST_HINT')}</p>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                 <label class="block text-sm">
                     <span>${tHtml('PAYROLL_SALES_BONUS')}</span>
                     <input type="number" min="0" step="1" class="form-input w-full pa-sales" value="${escapeHtml(String(valueOf(adj.salesBonus) || ''))}">
@@ -1550,11 +1546,6 @@ function renderPayrollAdjustPanel(data, panel, container) {
                     <input type="number" min="0" step="1" class="form-input w-full pa-advance" value="${escapeHtml(String(valueOf(adj.advanceDeduction)))}"
                            placeholder="${escapeHtml(String(data.advanceAuto || 0))}">
                     <span class="text-xs text-gray-500 dark:text-gray-400">${tHtml('PAYROLL_ADVANCE_AUTO_HINT', { amount: formatCurrency(data.advanceAuto || 0) })}</span>
-                </label>
-                <label class="block text-sm">
-                    <span>${tHtml('PAYROLL_ATTENDANCE_OVERRIDE')}</span>
-                    <input type="number" min="0" step="1" class="form-input w-full pa-attendance" value="${escapeHtml(String(valueOf(adj.attendanceBonus)))}">
-                    <span class="text-xs text-gray-500 dark:text-gray-400">${tHtml('PAYROLL_ATTENDANCE_AUTO_HINT')}</span>
                 </label>
             </div>
             <div class="text-sm font-semibold mb-2">${tHtml('PAYROLL_MANUAL_ITEMS')}</div>
@@ -1596,7 +1587,6 @@ function renderPayrollAdjustPanel(data, panel, container) {
         const adjustments = {
             salesBonus: numberOrNull(panel.querySelector('.pa-sales')) || 0,
             advanceDeduction: numberOrNull(panel.querySelector('.pa-advance')),
-            attendanceBonus: numberOrNull(panel.querySelector('.pa-attendance')),
             manualItems: Array.from(list.querySelectorAll('.pa-item')).map(row => ({
                 type: row.querySelector('.pa-item-type').value,
                 name: row.querySelector('.pa-item-name').value.trim(),
@@ -1664,7 +1654,6 @@ async function saveSalaryRecord(data) {
             `&positionAllowance=${encodeURIComponent(data.positionAllowance || 0)}` +
             `&mealAllowance=${encodeURIComponent(data.mealAllowance || 0)}` +
             `&transportAllowance=${encodeURIComponent(data.transportAllowance || 0)}` +
-            `&attendanceBonus=${encodeURIComponent(data.attendanceBonus || 0)}` +
             `&performanceBonus=${encodeURIComponent(data.performanceBonus || 0)}` +
             `&otherAllowances=${encodeURIComponent(data.otherAllowances || 0)}` +
             
